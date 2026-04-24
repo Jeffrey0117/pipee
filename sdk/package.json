@@ -1,0 +1,11 @@
+{
+  "name": "pipee-sdk",
+  "version": "1.0.0",
+  "description": "SDK for Pipee deployment platform",
+  "main": "index.js",
+  "license": "MIT",
+  "keywords": ["pipee", "deployment", "sdk"],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

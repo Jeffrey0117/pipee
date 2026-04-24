@@ -1,0 +1,35 @@
+{
+  "domain": "yourdomain.com",
+  "port": 8787,
+  "subdomain": "api",
+  "adminPassword": "change-this-password",
+  "jwtSecret": "your-random-jwt-secret-here",
+  "serviceToken": "internal_service_token_change_me",
+  "cloudflared": {
+    "path": "cloudflared",
+    "tunnelId": "your-tunnel-id",
+    "credentialsFile": "/path/to/.cloudflared/tunnel-id.json"
+  },
+  "telegram": {
+    "enabled": false,
+    "botToken": "",
+    "chatId": ""
+  },
+  "redis": {
+    "url": ""
+  },
+  "serviceWatchdog": {
+    "enabled": true,
+    "intervalMs": 120000,
+    "failThreshold": 3,
+    "maxRestarts": 5,
+    "cooldownMs": 300000,
+    "timeoutMs": 10000
+  },
+  "memoryWatchdog": {
+    "enabled": true,
+    "intervalMs": 300000,
+    "warningThresholdPercent": 80,
+    "sampleCount": 6
+  }
+}
