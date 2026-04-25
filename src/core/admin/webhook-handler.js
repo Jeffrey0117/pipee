@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Admin Webhook Handler
  *
  * GitHub webhook receive + logging + cross-machine dedup via Redis.

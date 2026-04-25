@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PIPEE Internal Gateway
  *
  * Lets any project call any other project's API through a single endpoint.

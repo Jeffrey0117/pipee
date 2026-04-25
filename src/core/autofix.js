@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Autofix Module
  *
  * When a deploy fails, automatically sends a fix request to ClaudeBot

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Tunnel Watchdog
  *
  * 每 2 分鐘檢查 Cloudflare Tunnel 健康狀態：

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PIPEE Gateway Client
  *
  * Lightweight client for any sub-project to call Gateway tools.

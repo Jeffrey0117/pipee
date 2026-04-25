@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PIPEE Static Hosting
  *
  * Serves static sites at {slug}.PIPEE.app

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PIPEE Telegram Helper
  *
  * Any sub-project can send Telegram messages through tg-proxy.

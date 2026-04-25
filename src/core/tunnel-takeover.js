@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Tunnel Takeover — Primary/Standby 模式
  *
  * 三種模式：

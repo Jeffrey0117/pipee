@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Admin Deploy Handlers
  *
  * Project CRUD, deploy, rollback, init-repo, webhook setup.

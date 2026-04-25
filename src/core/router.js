@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 核心路由器
  * 支援兩種模式：
  * 1. api.yourdomain.com → Dashboard + services/

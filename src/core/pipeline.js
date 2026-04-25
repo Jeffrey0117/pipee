@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PIPEE Pipeline Engine
  *
  * Chains multiple gateway calls into a workflow.

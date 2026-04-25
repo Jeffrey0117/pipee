@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PIPEE Redis Singleton
  *
  * 兩個 client：

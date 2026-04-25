@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PIPEE JWT Authentication Module
  * Unified authentication for inter-service communication
  */

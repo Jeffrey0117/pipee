@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PIPEE Telegram Bot
  *
  * 功能：

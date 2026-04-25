@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Core PIPEE MCP Tools
  * 平台管理工具：list projects, deploy, restart, logs, etc.
  */

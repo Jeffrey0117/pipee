@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Tunnel Primary Election
  *
  * 用 Redis SET NX 做 primary election，自動協調哪台機器跑 tunnel。

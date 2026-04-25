@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MCP Auto-Discovery Engine
  * 掃描 PIPEE 專案，自動從 manifest.json / openapi.json 產生 MCP tools
  *

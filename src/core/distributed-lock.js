@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Distributed Lock via Redis
  *
  * 跨機 deploy lock，用 Redis SET NX 實現。

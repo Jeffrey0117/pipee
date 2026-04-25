@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Admin System Handlers
  *
  * System status, machines, env bundle, setup bundle, config, Telegram settings.

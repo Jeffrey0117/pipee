@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PIPEE Heartbeat System
  *
  * 每 30 秒寫心跳到 Redis，TTL 90 秒。

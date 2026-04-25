@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Periodic Cleanup — 每 6 小時執行例行清理
  *
  * - Flush PM2 logs

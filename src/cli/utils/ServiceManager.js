@@ -1,4 +1,4 @@
-﻿const pm2 = require('pm2');
+const pm2 = require('pm2');
 const path = require('path');
 
 /**

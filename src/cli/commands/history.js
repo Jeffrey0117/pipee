@@ -1,4 +1,4 @@
-﻿const chalk = require('chalk');
+const chalk = require('chalk');
 const Table = require('cli-table3');
 const DeployHistory = require('../utils/DeployHistory');
 

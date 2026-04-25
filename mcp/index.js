@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PIPEE MCP Server
  * Core tools + auto-discovered project tools
  */

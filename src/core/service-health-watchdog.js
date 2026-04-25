@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Service Health Watchdog
  *
  * 每 2 分鐘探測所有 PM2 online 專案的 healthEndpoint：

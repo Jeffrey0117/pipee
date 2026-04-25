@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Tunnel Connector Info
  *
  * 查詢 cloudflared tunnel 的 connector 資訊（哪些機器連著 tunnel）。

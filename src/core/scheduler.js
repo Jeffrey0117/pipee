@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PIPEE Scheduler
  *
  * Runs pipelines and tools on cron schedules.

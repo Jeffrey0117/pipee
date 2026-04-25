@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PIPEE SQLite Data Layer
  *
  * Replaces projects.json / deployments.json with SQLite for atomic writes.

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PIPEE SDK
  * 用 fetch() 呼叫 PIPEE Admin API
  */
