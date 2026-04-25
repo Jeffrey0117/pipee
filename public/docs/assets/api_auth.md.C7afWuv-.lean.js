@@ -1,0 +1,1 @@
+import{_ as i,o as a,c as n,ag as t}from"./chunks/framework.wGDfT7ie.js";const c=JSON.parse('{"title":"認證","description":"","frontmatter":{},"headers":[],"relativePath":"api/auth.md","filePath":"api/auth.md"}'),e={name:"api/auth.md"};function l(h,s,p,k,o,r){return a(),n("div",null,[...s[0]||(s[0]=[t("",34)])])}const g=i(e,[["render",l]]);export{c as __pageData,g as default};
