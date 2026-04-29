@@ -95,6 +95,19 @@ function initSchema(db) {
       updated_at TEXT NOT NULL,
       FOREIGN KEY (token) REFERENCES deploy_tokens(token)
     );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      letmeuse_sub TEXT UNIQUE NOT NULL,
+      email TEXT,
+      name TEXT,
+      deploy_token TEXT UNIQUE,
+      plan TEXT NOT NULL DEFAULT 'free',
+      max_sites INTEGER NOT NULL DEFAULT 3,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (deploy_token) REFERENCES deploy_tokens(token)
+    );
   `);
 }
 
@@ -411,6 +424,68 @@ function countSitesByToken(token) {
   return row.count;
 }
 
+// ── Users API ─────────────────────────────────
+
+function getUserByLetmeuseSub(sub) {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM users WHERE letmeuse_sub = ?').get(sub);
+  return row || null;
+}
+
+function getUserById(id) {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  return row || null;
+}
+
+function createUser({ letmeuse_sub, email, name }) {
+  const crypto = require('crypto');
+  const db = getDb();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  // Create a deploy token for this user
+  const tokenRecord = createDeployToken({
+    name: name || email || letmeuse_sub,
+    email,
+    max_sites: 3,
+  });
+
+  db.prepare(
+    'INSERT INTO users (id, letmeuse_sub, email, name, deploy_token, plan, max_sites, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, letmeuse_sub, email || null, name || null, tokenRecord.token, 'free', 3, now, now);
+
+  return {
+    id, letmeuse_sub, email: email || null, name: name || null,
+    deploy_token: tokenRecord.token, plan: 'free', max_sites: 3,
+    created_at: now, updated_at: now,
+  };
+}
+
+function updateUser(id, patch) {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  if (!row) return null;
+
+  const allowed = ['email', 'name', 'plan', 'max_sites'];
+  const sets = [];
+  const values = [];
+  for (const key of allowed) {
+    if (patch[key] !== undefined) {
+      sets.push(`${key} = ?`);
+      values.push(patch[key]);
+    }
+  }
+  if (sets.length === 0) return row;
+
+  sets.push('updated_at = ?');
+  values.push(new Date().toISOString());
+  values.push(id);
+
+  db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+}
+
 // ── Lifecycle ───────────────────────────────
 
 function close() {
@@ -447,6 +522,11 @@ module.exports = {
   updateStaticSite,
   deleteStaticSite,
   countSitesByToken,
+
+  getUserByLetmeuseSub,
+  getUserById,
+  createUser,
+  updateUser,
 
   close,
 

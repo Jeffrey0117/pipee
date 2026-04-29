@@ -39,6 +39,8 @@ class ServiceRegistry {
       entry: path.join(__dirname, 'router.js'),
       port: this.config.port,
       subdomain: this.config.subdomain,
+      domain: this.config.domain,
+      staticDomain: this.config.staticDomain,
       servicesDir: dir
     });
   }

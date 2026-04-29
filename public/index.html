@@ -1,139 +1,858 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pipee</title>
+  <title>Pipee — Self-Hosted Deploy Platform</title>
   <link rel="icon" type="image/x-icon" href="/newfav.ico">
+  <meta name="description" content="Deploy your apps on your own machine. No vendor lock-in. No surprise bills. Just push and ship.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --bg: #06060a;
+      --bg-card: #0e0e14;
+      --bg-card-hover: #12121a;
+      --border: #1a1a2e;
+      --border-glow: #7c3aed;
+      --text: #e4e4ed;
+      --text-dim: #6b6b80;
+      --text-muted: #3d3d52;
+      --accent: #a78bfa;
+      --accent-bright: #c4b5fd;
+      --cta: #7c3aed;
+      --cta-hover: #6d28d9;
+      --green: #34d399;
+      --blue: #60a5fa;
+      --amber: #fbbf24;
+      --pink: #f472b6;
+      --font: 'DM Sans', -apple-system, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #0a0a0a;
-      color: #e0e0e0;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== HERO ===== */
+    .hero {
+      position: relative;
       min-height: 100vh;
-      padding: 3rem 1.5rem;
-    }
-    .container { max-width: 700px; margin: 0 auto; }
-    h1 { font-size: 2.5rem; font-weight: 200; color: #fff; text-align: center; margin-bottom: 0.5rem; }
-    .subtitle { color: #666; text-align: center; margin-bottom: 3rem; }
-
-    .section { margin-bottom: 2.5rem; }
-    .section h2 {
-      color: #4ade80;
-      font-size: 1rem;
-      font-weight: 500;
-      margin-bottom: 1rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid #252525;
-    }
-
-    .mode {
-      background: #151515;
-      border: 1px solid #252525;
-      border-radius: 8px;
-      padding: 1.25rem;
-      margin-bottom: 1rem;
-    }
-    .mode h3 { color: #fff; font-size: 0.95rem; margin-bottom: 0.5rem; }
-    .mode p { color: #888; font-size: 0.85rem; line-height: 1.6; }
-    .mode code {
-      background: #252525;
-      padding: 0.2rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.8rem;
-      color: #4ade80;
-    }
-
-    .example {
-      background: #1a1a1a;
-      border-left: 3px solid #4ade80;
-      padding: 1rem;
-      margin-top: 0.75rem;
-      border-radius: 0 6px 6px 0;
-    }
-    .example-title { color: #888; font-size: 0.75rem; margin-bottom: 0.5rem; }
-    .example-list { list-style: none; }
-    .example-list li {
-      color: #aaa;
-      font-size: 0.85rem;
-      padding: 0.3rem 0;
-    }
-    .example-list li::before {
-      content: ">";
-      color: #4ade80;
-      margin-right: 0.5rem;
-    }
-
-    .admin-link {
-      display: block;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       text-align: center;
-      color: #555;
-      font-size: 0.8rem;
-      text-decoration: none;
-      margin-top: 2rem;
+      padding: 2rem;
+      overflow: hidden;
     }
-    .admin-link:hover { color: #888; }
+
+    /* Gradient orbs */
+    .hero::before,
+    .hero::after {
+      content: '';
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.4;
+      pointer-events: none;
+      animation: float 8s ease-in-out infinite;
+    }
+    .hero::before {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, #7c3aed 0%, transparent 70%);
+      top: -200px; right: -100px;
+    }
+    .hero::after {
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, #2563eb 0%, transparent 70%);
+      bottom: -150px; left: -100px;
+      animation-delay: -4s;
+    }
+
+    /* Grid overlay */
+    .grid-bg {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(124,58,237,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(124,58,237,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 30%, transparent 100%);
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 30%, transparent 100%);
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      max-width: 800px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(124,58,237,0.1);
+      border: 1px solid rgba(124,58,237,0.2);
+      border-radius: 100px;
+      padding: 0.4rem 1rem;
+      font-size: 0.8rem;
+      color: var(--accent);
+      margin-bottom: 2rem;
+      animation: fadeUp 0.8s ease both;
+    }
+    .badge-dot {
+      width: 6px; height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.8rem, 7vw, 5rem);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.5rem;
+      animation: fadeUp 0.8s ease 0.1s both;
+    }
+    .hero h1 .gradient-text {
+      background: linear-gradient(135deg, var(--accent-bright) 0%, var(--blue) 50%, var(--green) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-sub {
+      font-size: clamp(1.05rem, 2.5vw, 1.3rem);
+      color: var(--text-dim);
+      line-height: 1.7;
+      max-width: 560px;
+      margin: 0 auto 2.5rem;
+      font-weight: 400;
+      animation: fadeUp 0.8s ease 0.2s both;
+    }
+
+    .cta-group {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      animation: fadeUp 0.8s ease 0.3s both;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.85rem 2rem;
+      border-radius: 10px;
+      font-family: var(--font);
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      border: none;
+    }
+    .btn-primary {
+      background: var(--cta);
+      color: #fff;
+      box-shadow: 0 0 30px rgba(124,58,237,0.3);
+    }
+    .btn-primary:hover {
+      background: var(--cta-hover);
+      box-shadow: 0 0 50px rgba(124,58,237,0.5);
+      transform: translateY(-1px);
+    }
+    .btn-ghost {
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.15);
+    }
+
+    /* Scroll indicator */
+    .scroll-hint {
+      position: absolute;
+      bottom: 2.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      animation: fadeUp 0.8s ease 0.6s both;
+    }
+    .scroll-line {
+      width: 1px;
+      height: 40px;
+      background: linear-gradient(to bottom, var(--text-muted), transparent);
+      animation: scroll-pulse 2s ease-in-out infinite;
+    }
+
+    /* ===== TERMINAL DEMO ===== */
+    .terminal-section {
+      padding: 0 2rem 6rem;
+      display: flex;
+      justify-content: center;
+      animation: fadeUp 0.8s ease 0.4s both;
+    }
+
+    .terminal {
+      width: 100%;
+      max-width: 680px;
+      background: #0c0c14;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 25px 80px rgba(0,0,0,0.5), 0 0 60px rgba(124,58,237,0.08);
+    }
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0.75rem 1rem;
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid var(--border);
+    }
+    .terminal-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+    }
+    .terminal-dot:nth-child(1) { background: #ff5f57; }
+    .terminal-dot:nth-child(2) { background: #febc2e; }
+    .terminal-dot:nth-child(3) { background: #28c840; }
+    .terminal-title {
+      flex: 1;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+    .terminal-body {
+      padding: 1.25rem 1.5rem;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      line-height: 1.8;
+      min-height: 220px;
+    }
+    .t-prompt { color: var(--green); }
+    .t-cmd { color: var(--text); }
+    .t-comment { color: var(--text-muted); }
+    .t-output { color: var(--text-dim); }
+    .t-success { color: var(--green); }
+    .t-url { color: var(--blue); }
+    .t-line {
+      opacity: 0;
+      animation: typeLine 0.3s ease forwards;
+    }
+    .t-line:nth-child(1) { animation-delay: 0.5s; }
+    .t-line:nth-child(2) { animation-delay: 1.2s; }
+    .t-line:nth-child(3) { animation-delay: 1.8s; }
+    .t-line:nth-child(4) { animation-delay: 2.4s; }
+    .t-line:nth-child(5) { animation-delay: 3.0s; }
+    .t-line:nth-child(6) { animation-delay: 3.6s; }
+    .t-line:nth-child(7) { animation-delay: 4.2s; }
+
+    /* ===== STATS ===== */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--border);
+      max-width: 900px;
+      margin: 0 auto 6rem;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .stat {
+      background: var(--bg);
+      padding: 2rem 1.5rem;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.3rem;
+    }
+    .stat-value.purple { color: var(--accent-bright); }
+    .stat-value.green { color: var(--green); }
+    .stat-value.blue { color: var(--blue); }
+    .stat-value.amber { color: var(--amber); }
+    .stat-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    /* ===== FEATURES ===== */
+    .features-section {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 2rem 8rem;
+    }
+    .section-header {
+      text-align: center;
+      margin-bottom: 4rem;
+    }
+    .section-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 1rem;
+    }
+    .section-title {
+      font-size: clamp(2rem, 4vw, 2.8rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .feature {
+      background: var(--bg-card);
+      padding: 2.5rem 2rem;
+      transition: background 0.3s ease;
+    }
+    .feature:hover {
+      background: var(--bg-card-hover);
+    }
+    .feature-icon {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      margin-bottom: 1.25rem;
+      font-size: 1.2rem;
+    }
+    .feature-icon.purple { background: rgba(124,58,237,0.15); color: var(--accent-bright); }
+    .feature-icon.green { background: rgba(52,211,153,0.15); color: var(--green); }
+    .feature-icon.blue { background: rgba(96,165,250,0.15); color: var(--blue); }
+    .feature-icon.amber { background: rgba(251,191,36,0.15); color: var(--amber); }
+    .feature-icon.pink { background: rgba(244,114,182,0.15); color: var(--pink); }
+
+    .feature h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 0.6rem;
+      letter-spacing: -0.01em;
+    }
+    .feature p {
+      font-size: 0.9rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+
+    /* ===== COMPARISON ===== */
+    .compare-section {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 2rem 8rem;
+    }
+    .compare-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .compare-table th,
+    .compare-table td {
+      padding: 1rem 1.5rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .compare-table th {
+      background: rgba(124,58,237,0.05);
+      font-weight: 600;
+      color: var(--text);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .compare-table tr:last-child td { border-bottom: none; }
+    .compare-table td:first-child {
+      font-weight: 500;
+      color: var(--text);
+    }
+    .compare-table td { color: var(--text-dim); }
+    .check { color: var(--green); font-weight: 700; font-size: 1.1rem; }
+    .cross { color: var(--text-muted); }
+    .pipee-col { background: rgba(124,58,237,0.04); }
+
+    /* ===== HOW IT WORKS ===== */
+    .how-section {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 2rem 8rem;
+    }
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .step {
+      display: flex;
+      gap: 2rem;
+      padding: 2rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .step:last-child { border-bottom: none; }
+    .step-num {
+      font-size: 3rem;
+      font-weight: 800;
+      color: var(--text-muted);
+      line-height: 1;
+      min-width: 60px;
+    }
+    .step-content h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+    .step-content p {
+      color: var(--text-dim);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+    .step-code {
+      background: #0c0c14;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 1rem;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      color: var(--green);
+      margin-top: 0.75rem;
+      display: inline-block;
+    }
+
+    /* ===== BOTTOM CTA ===== */
+    .bottom-cta {
+      text-align: center;
+      padding: 6rem 2rem 8rem;
+      position: relative;
+    }
+    .bottom-cta::before {
+      content: '';
+      position: absolute;
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(124,58,237,0.12) 0%, transparent 70%);
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      filter: blur(80px);
+      pointer-events: none;
+    }
+    .bottom-cta h2 {
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 1rem;
+      position: relative;
+    }
+    .bottom-cta p {
+      color: var(--text-dim);
+      font-size: 1.1rem;
+      margin-bottom: 2.5rem;
+      position: relative;
+    }
+    .bottom-cta .cta-group { position: relative; }
+
+    /* ===== FOOTER ===== */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 2rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+    footer a {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    footer a:hover { color: var(--text-dim); }
+    .footer-sep { color: var(--text-muted); font-size: 0.7rem; }
+
+    /* ===== ANIMATIONS ===== */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(30px, -30px); }
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    @keyframes scroll-pulse {
+      0%, 100% { opacity: 0.3; transform: scaleY(1); }
+      50% { opacity: 1; transform: scaleY(0.6); }
+    }
+    @keyframes typeLine {
+      from { opacity: 0; transform: translateX(-4px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ===== NAVBAR ===== */
+    .top-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 2rem;
+      background: rgba(6,6,10,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(26,26,46,0.5);
+    }
+    .top-nav-brand {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .top-nav-links {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+    .top-nav-links a {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .top-nav-links a:hover { color: var(--text); }
+    .top-nav-btn {
+      padding: 0.4rem 1rem;
+      border-radius: 8px;
+      font-family: var(--font);
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      background: var(--cta);
+      color: #fff;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .top-nav-btn:hover { background: var(--cta-hover); }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .features-grid { grid-template-columns: 1fr; }
+      .step { flex-direction: column; gap: 0.5rem; }
+      .step-num { font-size: 2rem; }
+      .compare-table { font-size: 0.8rem; }
+      .compare-table th,
+      .compare-table td { padding: 0.75rem 0.8rem; }
+    }
+    @media (max-width: 480px) {
+      .stats { grid-template-columns: 1fr; }
+      .hero { padding: 2rem 1.25rem; }
+      .terminal-body { padding: 1rem; font-size: 0.75rem; }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Pipee</h1>
-    <p class="subtitle">Zero-Config Deploy Platform</p>
 
-    <div class="section">
-      <h2>Deploy Modes</h2>
+  <!-- ===== NAVBAR ===== -->
+  <nav class="top-nav">
+    <a href="/" class="top-nav-brand">Pipee</a>
+    <div class="top-nav-links">
+      <a href="/console">Console</a>
+      <a href="/docs/">Docs</a>
+      <a href="https://github.com/Jeffrey0117/pipee" target="_blank">GitHub</a>
+      <a href="/console" class="top-nav-btn">Start Deploying</a>
+    </div>
+  </nav>
 
-      <div class="mode">
-        <h3>API Services (Path-based)</h3>
-        <p>上傳 <code>.js</code> 檔案，透過路徑存取 API</p>
-        <p>URL: <code>api.yourdomain.com/{name}</code></p>
-        <div class="example">
-          <div class="example-title">Examples</div>
-          <ul class="example-list">
-            <li>YouTube 下載 API → <code>/ytdownload</code></li>
-            <li>圖片壓縮 API → <code>/compress</code></li>
-            <li>翻譯服務 → <code>/translate</code></li>
-            <li>Webhook 接收器 → <code>/webhook</code></li>
-          </ul>
+  <!-- ===== HERO ===== -->
+  <section class="hero">
+    <div class="grid-bg"></div>
+    <div class="hero-content">
+      <div class="badge">
+        <span class="badge-dot"></span>
+        Free &middot; Open Source
+      </div>
+      <h1>
+        Deploy your site.<br>
+        <span class="gradient-text">Free. Instantly.</span>
+      </h1>
+      <p class="hero-sub">
+        Upload a ZIP, get a live site at yourname.pipee.tw.
+        No credit card. No cloud bills. Just deploy.
+      </p>
+      <div class="cta-group">
+        <a href="/console" class="btn btn-primary">
+          Start Deploying
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <a href="https://github.com/Jeffrey0117/pipee" class="btn btn-ghost" target="_blank">
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="scroll-hint">
+      <div class="scroll-line"></div>
+    </div>
+  </section>
+
+  <!-- ===== TERMINAL DEMO ===== -->
+  <section class="terminal-section">
+    <div class="terminal">
+      <div class="terminal-bar">
+        <div class="terminal-dot"></div>
+        <div class="terminal-dot"></div>
+        <div class="terminal-dot"></div>
+        <span class="terminal-title">terminal</span>
+        <div style="width:30px"></div>
+      </div>
+      <div class="terminal-body">
+        <div class="t-line"><span class="t-prompt">$</span> <span class="t-cmd">npx pipee init</span></div>
+        <div class="t-line"><span class="t-output">Setting up Pipee on port 8800...</span></div>
+        <div class="t-line"><span class="t-prompt">$</span> <span class="t-cmd">git push origin main</span></div>
+        <div class="t-line"><span class="t-output">Webhook received. Building project...</span></div>
+        <div class="t-line"><span class="t-success">&#10003; Build complete</span> <span class="t-comment">(12s)</span></div>
+        <div class="t-line"><span class="t-success">&#10003; Deployed to</span> <span class="t-url">https://myapp.yourdomain.com</span></div>
+        <div class="t-line"><span class="t-comment"># Zero config. Zero cost. All yours.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== STATS ===== -->
+  <section class="stats">
+    <div class="stat">
+      <div class="stat-value purple">&lt;30s</div>
+      <div class="stat-label">Deploy Time</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value green">$0</div>
+      <div class="stat-label">Monthly Cost</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value blue">100%</div>
+      <div class="stat-label">Your Data</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value amber">&infin;</div>
+      <div class="stat-label">Projects</div>
+    </div>
+  </section>
+
+  <!-- ===== FEATURES ===== -->
+  <section class="features-section">
+    <div class="section-header">
+      <div class="section-label">Features</div>
+      <h2 class="section-title">Everything you need.<br>Nothing you don't.</h2>
+    </div>
+    <div class="features-grid">
+      <div class="feature">
+        <div class="feature-icon purple">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <h3>Git Push Deploy</h3>
+        <p>Push to GitHub and your app auto-deploys. Webhooks, rollback, zero downtime — all built in.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon green">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3>Auto SSL &amp; Domains</h3>
+        <p>Cloudflare Tunnel gives you HTTPS, custom domains, and DDoS protection — no port forwarding needed.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon blue">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        </div>
+        <h3>Admin Dashboard</h3>
+        <p>Real-time monitoring, deployment history, logs, and project management — all from your browser.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon amber">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+        </div>
+        <h3>Self-Healing</h3>
+        <p>Health watchdogs auto-restart crashed services, rollback bad deploys, and alert you via Telegram.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon pink">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        </div>
+        <h3>AI-Ready (MCP)</h3>
+        <p>Built-in MCP server lets Claude Code and AI agents deploy, monitor, and manage your infra directly.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon purple">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+        </div>
+        <h3>Multi-Runtime</h3>
+        <p>Node.js, Next.js, Python, static sites — Pipee auto-detects and runs with PM2 process management.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== HOW IT WORKS ===== -->
+  <section class="how-section">
+    <div class="section-header">
+      <div class="section-label">How It Works</div>
+      <h2 class="section-title">Three steps. That's it.</h2>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div class="step-content">
+          <h3>Install Pipee</h3>
+          <p>Clone the repo and run setup. Takes 2 minutes on any machine — Windows, Mac, or Linux.</p>
+          <div class="step-code">git clone https://github.com/Jeffrey0117/pipee && cd pipee && npm i</div>
         </div>
       </div>
-
-      <div class="mode">
-        <h3>App Deploy (Subdomain)</h3>
-        <p>上傳 <code>.zip</code> 專案，自動建立子域名</p>
-        <p>URL: <code>{name}.yourdomain.com</code></p>
-        <div class="example">
-          <div class="example-title">Examples</div>
-          <ul class="example-list">
-            <li>個人 Blog → <code>blog.yourdomain.com</code></li>
-            <li>作品集網站 → <code>portfolio.yourdomain.com</code></li>
-            <li>React/Vue App → <code>myapp.yourdomain.com</code></li>
-            <li>文件站 → <code>docs.yourdomain.com</code></li>
-          </ul>
+      <div class="step">
+        <div class="step-num">02</div>
+        <div class="step-content">
+          <h3>Connect your domain</h3>
+          <p>Point your domain to Cloudflare, add a tunnel CNAME — instant HTTPS, no port forwarding.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <div class="step-content">
+          <h3>Push and deploy</h3>
+          <p>Register a project, push to GitHub, Pipee auto-builds and deploys. Rollback any time.</p>
+          <div class="step-code">git push origin main &nbsp;&rarr;&nbsp; live in 30s</div>
         </div>
       </div>
     </div>
+  </section>
 
-    <div class="section">
-      <h2>API Service Format</h2>
-      <div class="mode">
-        <p>上傳的 <code>.js</code> 檔案需 export 以下格式：</p>
-        <div class="example">
-          <pre style="color:#aaa;font-size:0.8rem;line-height:1.5;overflow-x:auto;">module.exports = {
-  match(req) {
-    return req.url.startsWith('/yourname');
-  },
-  handle(req, res) {
-    res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ hello: 'world' }));
-  }
-};</pre>
-        </div>
-      </div>
+  <!-- ===== COMPARISON ===== -->
+  <section class="compare-section">
+    <div class="section-header">
+      <div class="section-label">Why Pipee</div>
+      <h2 class="section-title">You own everything.</h2>
     </div>
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Vercel</th>
+          <th>Railway</th>
+          <th class="pipee-col">Pipee</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Monthly cost</td>
+          <td>$20+</td>
+          <td>$5+/app</td>
+          <td class="pipee-col"><span class="check">$0</span></td>
+        </tr>
+        <tr>
+          <td>Self-hosted</td>
+          <td><span class="cross">&mdash;</span></td>
+          <td><span class="cross">&mdash;</span></td>
+          <td class="pipee-col"><span class="check">&#10003;</span></td>
+        </tr>
+        <tr>
+          <td>Data ownership</td>
+          <td>Their servers</td>
+          <td>Their servers</td>
+          <td class="pipee-col"><span class="check">Your machine</span></td>
+        </tr>
+        <tr>
+          <td>Project limit</td>
+          <td>Limited</td>
+          <td>Pay per use</td>
+          <td class="pipee-col"><span class="check">Unlimited</span></td>
+        </tr>
+        <tr>
+          <td>AI integration</td>
+          <td><span class="cross">&mdash;</span></td>
+          <td><span class="cross">&mdash;</span></td>
+          <td class="pipee-col"><span class="check">MCP built-in</span></td>
+        </tr>
+        <tr>
+          <td>Open source</td>
+          <td><span class="cross">&mdash;</span></td>
+          <td><span class="cross">&mdash;</span></td>
+          <td class="pipee-col"><span class="check">MIT License</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
 
-    <a href="/_admin" class="admin-link">Admin Dashboard</a>
-  </div>
+  <!-- ===== BOTTOM CTA ===== -->
+  <section class="bottom-cta">
+    <h2>Ready to deploy?</h2>
+    <p>Free hosting. No credit card. Just upload and go.</p>
+    <div class="cta-group">
+      <a href="/console" class="btn btn-primary">
+        Start Deploying
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+      <a href="https://github.com/Jeffrey0117/pipee" class="btn btn-ghost" target="_blank">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        Star on GitHub
+      </a>
+    </div>
+  </section>
+
+  <!-- ===== FOOTER ===== -->
+  <footer>
+    <a href="https://github.com/Jeffrey0117/pipee" target="_blank">GitHub</a>
+    <span class="footer-sep">&middot;</span>
+    <a href="/console">Console</a>
+    <span class="footer-sep">&middot;</span>
+    <a href="/docs/">Docs</a>
+    <span class="footer-sep">&middot;</span>
+    <a href="/_admin">Admin</a>
+    <span class="footer-sep">&middot;</span>
+    <a href="https://github.com/Jeffrey0117/pipee/blob/master/LICENSE" target="_blank">MIT License</a>
+  </footer>
+
 </body>
 </html>

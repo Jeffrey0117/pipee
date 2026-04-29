@@ -61,8 +61,10 @@ const MIME = {
 
 const RESERVED_SLUGS = new Set([
   'www', 'api', 'admin', 'app', 'dashboard', 'static', 'cdn',
-  'mail', 'ftp', 'ssh', 'PIPEE', 'status', 'health',
-  'login', 'signup', 'blog', 'docs'
+  'mail', 'ftp', 'ssh', 'pipee', 'status', 'health',
+  'login', 'signup', 'blog', 'docs',
+  'console', 'billing', 'support', 'help', 'about',
+  'ns1', 'ns2', 'dev', 'staging', 'test', 'demo', 'assets'
 ]);
 
 function validateSlug(slug) {
@@ -308,31 +310,62 @@ async function handleAPI(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const pathname = url.pathname;
 
-  // PUT /api/deploy/static?slug=xxx — deploy a static site
+  // User API routes (LetMeUse auth)
+  if (pathname.startsWith('/api/auth/') || pathname.startsWith('/api/user/')) {
+    // /api/auth/token stays admin-only
+    if (req.method === 'POST' && pathname === '/api/auth/token') {
+      return handleCreateToken(req, res);
+    }
+    const userApi = require('./user-api');
+    return userApi.handle(req, res, pathname);
+  }
+
+  // PUT /api/deploy/static?slug=xxx — deploy a static site (CLI token auth)
   if (req.method === 'PUT' && pathname === '/api/deploy/static') {
     return handleDeploy(req, res, url);
   }
 
-  // GET /api/sites — list user's sites
+  // GET /api/sites — list user's sites (CLI token auth)
   if (req.method === 'GET' && pathname === '/api/sites') {
     return handleListSites(req, res);
   }
 
-  // DELETE /api/sites/:slug — delete a site
+  // DELETE /api/sites/:slug — delete a site (CLI token auth)
   if (req.method === 'DELETE' && pathname.startsWith('/api/sites/')) {
     const slug = pathname.slice('/api/sites/'.length);
     return handleDeleteSite(req, res, slug);
   }
 
-  // POST /api/auth/token — create deploy token (admin only)
-  if (req.method === 'POST' && pathname === '/api/auth/token') {
-    return handleCreateToken(req, res);
+  // GET /console — serve user dashboard
+  if (req.method === 'GET' && (pathname === '/console' || pathname === '/console/')) {
+    const consolePath = path.join(ROOT, 'public', 'console.html');
+    if (fs.existsSync(consolePath)) {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end(fs.readFileSync(consolePath));
+    }
   }
 
-  // Fallback: serve landing page or 404
+  // Fallback: serve landing page
+  if (req.method === 'GET' && (pathname === '/' || pathname === '')) {
+    const indexPath = path.join(ROOT, 'public', 'index.html');
+    if (fs.existsSync(indexPath)) {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end(fs.readFileSync(indexPath));
+    }
+  }
+
+  // Serve static assets from public/
   if (req.method === 'GET') {
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-    return res.end('<h1>PIPEE</h1><p>Deploy static sites with one command.</p><code>npx PIPEE-cli up</code>');
+    const publicDir = path.join(ROOT, 'public');
+    const filePath = path.resolve(publicDir, '.' + pathname);
+    const resolvedPublic = path.resolve(publicDir);
+    if (filePath.startsWith(resolvedPublic + path.sep) || filePath === resolvedPublic) {
+      const ext = path.extname(filePath).toLowerCase();
+      if (ext && MIME[ext] && fs.existsSync(filePath)) {
+        res.writeHead(200, { 'content-type': MIME[ext] });
+        return res.end(fs.readFileSync(filePath));
+      }
+    }
   }
 
   return jsonErr(res, 'Not found', 'NOT_FOUND', 404);

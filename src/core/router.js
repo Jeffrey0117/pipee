@@ -248,7 +248,7 @@ const createRouter = function(config) {
     }
 
     // ========== Main domain (api.yourdomain.com) ==========
-    if (subdomain === mainSubdomain || hostname === 'localhost') {
+    if (subdomain === mainSubdomain || hostname === 'localhost' || hostname === domain) {
       return handleMainDomain(req, res, { publicDir });
     }
 
@@ -290,7 +290,13 @@ const createRouter = function(config) {
     }
 
     // Static hosting API on main domain (localhost access)
-    if (urlPath === '/api/deploy/static' || urlPath.startsWith('/api/sites') || urlPath === '/api/auth/token') {
+    if (urlPath === '/api/deploy/static' || urlPath.startsWith('/api/sites') || urlPath.startsWith('/api/auth/') || urlPath.startsWith('/api/user/')) {
+      const staticHost = require('./static')
+      return staticHost.handleAPI(req, res)
+    }
+
+    // /console → user dashboard (localhost access)
+    if (urlPath === '/console' || urlPath === '/console/') {
       const staticHost = require('./static')
       return staticHost.handleAPI(req, res)
     }
