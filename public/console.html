@@ -10,14 +10,14 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #06060a;
-      --bg-card: #0e0e14;
-      --bg-card-hover: #12121a;
-      --border: #1a1a2e;
+      --bg: #0d0d14;
+      --bg-card: #15151e;
+      --bg-card-hover: #1c1c28;
+      --border: #252538;
       --border-glow: #7c3aed;
       --text: #e4e4ed;
-      --text-dim: #6b6b80;
-      --text-muted: #3d3d52;
+      --text-dim: #7e7e96;
+      --text-muted: #4d4d64;
       --accent: #a78bfa;
       --accent-bright: #c4b5fd;
       --cta: #7c3aed;
@@ -26,8 +26,31 @@
       --blue: #60a5fa;
       --amber: #fbbf24;
       --red: #f87171;
+      --bg-nav: rgba(13,13,20,0.9);
+      --bg-code: #0f0f18;
       --font: 'DM Sans', -apple-system, sans-serif;
       --mono: 'JetBrains Mono', monospace;
+    }
+
+    html.light {
+      --bg: #f5f5fa;
+      --bg-card: #ffffff;
+      --bg-card-hover: #ededf4;
+      --border: #dddde8;
+      --border-glow: #7c3aed;
+      --text: #1a1a2e;
+      --text-dim: #5a5a72;
+      --text-muted: #9090a8;
+      --accent: #7c3aed;
+      --accent-bright: #6d28d9;
+      --cta: #7c3aed;
+      --cta-hover: #6d28d9;
+      --green: #059669;
+      --blue: #2563eb;
+      --amber: #d97706;
+      --red: #ef4444;
+      --bg-nav: rgba(245,245,250,0.92);
+      --bg-code: #eeeef4;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -46,7 +69,7 @@
       justify-content: space-between;
       padding: 1rem 2rem;
       border-bottom: 1px solid var(--border);
-      background: rgba(6,6,10,0.9);
+      background: var(--bg-nav);
       backdrop-filter: blur(12px);
       position: sticky;
       top: 0;
@@ -375,6 +398,54 @@
       border-color: var(--text-muted);
     }
 
+    /* ===== LIGHT MODE OVERRIDES ===== */
+    html.light .btn-sm-ghost {
+      border-color: var(--border);
+      color: var(--text-dim);
+    }
+    html.light .drop-zone:hover,
+    html.light .drop-zone.dragover {
+      background: rgba(124,58,237,0.06);
+    }
+    html.light .cli-code {
+      background: var(--bg-card);
+    }
+    html.light .deploy-status.success {
+      background: rgba(5,150,105,0.08);
+      border-color: rgba(5,150,105,0.2);
+    }
+    html.light .deploy-status.error {
+      background: rgba(239,68,68,0.08);
+      border-color: rgba(239,68,68,0.2);
+    }
+    html.light .deploy-status.loading {
+      background: rgba(37,99,235,0.08);
+      border-color: rgba(37,99,235,0.2);
+    }
+
+    /* Theme toggle */
+    .theme-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .theme-toggle:hover {
+      color: var(--text);
+      border-color: var(--text-muted);
+    }
+    .theme-toggle .icon-sun { display: none; }
+    .theme-toggle .icon-moon { display: block; }
+    html.light .theme-toggle .icon-sun { display: block; }
+    html.light .theme-toggle .icon-moon { display: none; }
+
     /* ===== RESPONSIVE ===== */
     @media (max-width: 600px) {
       .navbar { padding: 0.75rem 1rem; }
@@ -385,6 +456,14 @@
 
     .hidden { display: none !important; }
   </style>
+  <script>
+    (function() {
+      var s = localStorage.getItem('pipee-theme');
+      if (s === 'light' || (!s && window.matchMedia('(prefers-color-scheme: light)').matches)) {
+        document.documentElement.classList.add('light');
+      }
+    })();
+  </script>
 </head>
 <body>
 
@@ -395,6 +474,10 @@
       <span class="nav-user" id="nav-user"></span>
       <button class="btn-sm btn-sm-primary hidden" id="btn-login" onclick="doLogin()">Login</button>
       <button class="btn-sm btn-sm-ghost hidden" id="btn-logout" onclick="doLogout()">Logout</button>
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      </button>
     </div>
   </nav>
 
@@ -453,6 +536,13 @@
     </div>
   </div>
 
+  <script>
+    function toggleTheme() {
+      document.documentElement.classList.toggle('light');
+      localStorage.setItem('pipee-theme',
+        document.documentElement.classList.contains('light') ? 'light' : 'dark');
+    }
+  </script>
   <script>
     // ── HTML escaping ──
     function escapeHtml(str) {
@@ -562,7 +652,7 @@
         const script = document.createElement('script');
         script.src = 'https://letmeuse.isnowfriend.com/letmeuse.js';
         script.setAttribute('data-app-id', 'app_LwmRGw');
-        script.setAttribute('data-theme', 'dark');
+        script.setAttribute('data-theme', document.documentElement.classList.contains('light') ? 'light' : 'dark');
         script.setAttribute('data-accent', '#a78bfa');
         script.setAttribute('data-locale', 'zh');
         script.setAttribute('data-mode', 'modal');
