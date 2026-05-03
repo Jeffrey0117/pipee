@@ -310,6 +310,12 @@ async function handleAPI(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const pathname = url.pathname;
 
+  // PayGate webhook
+  if (req.method === 'POST' && pathname === '/api/paygate/webhook') {
+    const paygateWebhook = require('./paygate-webhook');
+    return paygateWebhook.handleWebhook(req, res);
+  }
+
   // User API routes (LetMeUse auth)
   if (pathname.startsWith('/api/auth/') || pathname.startsWith('/api/user/')) {
     // /api/auth/token stays admin-only

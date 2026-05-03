@@ -207,6 +207,17 @@ function getSiteUrl(req, slug, domain) {
 
 const { validateSlug } = require('./static');
 
+// ── AI Edit constants ──
+
+const AI_EDIT_QUOTA = 100; // per month for Creator plan
+const AI_SYSTEM_PROMPT = `你是網站編輯助手。你只能修改當前工作目錄中的檔案（HTML、CSS、JavaScript）。
+規則：
+- 只能讀取和修改當前目錄及子目錄中的檔案
+- 不能建立超出網站範圍的檔案
+- 修改後網站會即時生效
+- 用繁體中文回覆使用者
+- 簡潔回覆，說明你做了什麼改動`;
+
 // ── Route handler ──
 
 async function handle(req, res, pathname) {
@@ -228,6 +239,12 @@ async function handle(req, res, pathname) {
   // POST /api/user/deploy?slug=xxx
   if (req.method === 'POST' && pathname === '/api/user/deploy') {
     return handleUserDeploy(req, res);
+  }
+
+  // POST /api/user/sites/:slug/ai-edit
+  const aiEditMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/ai-edit$/);
+  if (req.method === 'POST' && aiEditMatch) {
+    return handleAiEdit(req, res, aiEditMatch[1]);
   }
 
   // DELETE /api/user/sites/:slug
@@ -464,6 +481,180 @@ function handleUserDeleteSite(req, res, slug) {
   db.deleteStaticSite(slug);
 
   return jsonOk(res, { deleted: true });
+}
+
+// ── POST /api/user/sites/:slug/ai-edit ──
+
+async function handleAiEdit(req, res, slug) {
+  const result = verifyUserRequest(req);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  const { user } = result;
+
+  // Rate limit
+  const apiBlocked = checkUserApiRateLimit(user.id);
+  if (apiBlocked) return jsonErr(res, 'Too many requests', 'RATE_LIMITED', 429);
+
+  // Plan check: must be creator
+  if (user.plan !== 'creator') {
+    return jsonErr(res, 'Creator plan required for AI editing', 'PLAN_REQUIRED', 403);
+  }
+
+  // Ownership check
+  const site = db.getStaticSite(slug);
+  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
+  if (site.token !== user.deploy_token) {
+    return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
+  }
+
+  // Quota check
+  db.resetAiEditsIfNeeded(user.id);
+  const remaining = db.getAiEditsRemaining(user.id, AI_EDIT_QUOTA);
+  if (remaining <= 0) {
+    return jsonErr(res, 'Monthly AI edit quota exhausted (100/month)', 'QUOTA_EXCEEDED', 402);
+  }
+
+  // Parse body
+  let body;
+  try {
+    body = await collectBody(req, 16384);
+  } catch {
+    return jsonErr(res, 'Failed to read body', 'BAD_REQUEST', 400);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(body.toString('utf8'));
+  } catch {
+    return jsonErr(res, 'Invalid JSON', 'BAD_REQUEST', 400);
+  }
+
+  if (!data.message || typeof data.message !== 'string' || data.message.trim().length === 0) {
+    return jsonErr(res, 'message is required', 'BAD_REQUEST', 400);
+  }
+
+  const siteDir = path.join(STATIC_DIR, slug);
+  if (!fs.existsSync(siteDir)) {
+    return jsonErr(res, 'Site directory not found', 'NOT_FOUND', 404);
+  }
+
+  // Get or create session
+  const aiSessions = require('./ai-sessions');
+  const existingSession = aiSessions.getSession(user.id, slug);
+
+  // Build Claude CLI args
+  const args = [
+    '--print',
+    '--output-format', 'stream-json',
+    '--model', 'claude-sonnet-4-5-20250514',
+    '--max-turns', '15',
+    '--allowedTools', 'Read,Write,Edit,Glob,Grep',
+    '--append-system-prompt', AI_SYSTEM_PROMPT,
+  ];
+
+  if (existingSession) {
+    args.push('--resume', existingSession);
+  }
+
+  // The user's message goes last
+  args.push(data.message);
+
+  // Set up SSE response
+  res.writeHead(200, {
+    'content-type': 'text/event-stream',
+    'cache-control': 'no-cache',
+    'connection': 'keep-alive',
+    'x-ai-edits-remaining': String(remaining - 1),
+  });
+
+  const { spawn } = require('child_process');
+
+  let claudeProcess;
+  try {
+    claudeProcess = spawn('claude', args, {
+      cwd: siteDir,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: true,
+      env: { ...process.env, CLAUDE_CODE_ENTRYPOINT: 'pipee-ai-edit' },
+    });
+  } catch (err) {
+    res.write(`data: ${JSON.stringify({ type: 'error', error: 'Failed to start AI editor: ' + err.message })}\n\n`);
+    res.end();
+    return;
+  }
+
+  // Close stdin immediately (we pass message via args)
+  claudeProcess.stdin.end();
+
+  let sessionId = existingSession;
+  let buffer = '';
+
+  claudeProcess.stdout.on('data', (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split('\n');
+    buffer = lines.pop(); // keep incomplete line in buffer
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line);
+
+        // Extract session ID from result event
+        if (event.type === 'result' && event.session_id) {
+          sessionId = event.session_id;
+        }
+
+        // Forward to client
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      } catch {
+        // Non-JSON line, skip
+      }
+    }
+  });
+
+  claudeProcess.stderr.on('data', (chunk) => {
+    const errText = chunk.toString().trim();
+    if (errText) {
+      res.write(`data: ${JSON.stringify({ type: 'system', message: errText })}\n\n`);
+    }
+  });
+
+  claudeProcess.on('close', (code) => {
+    // Process remaining buffer
+    if (buffer.trim()) {
+      try {
+        const event = JSON.parse(buffer);
+        if (event.type === 'result' && event.session_id) {
+          sessionId = event.session_id;
+        }
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      } catch { /* ignore */ }
+    }
+
+    // Save session for continuity
+    if (sessionId) {
+      aiSessions.setSession(user.id, slug, sessionId);
+    }
+
+    // Increment quota
+    db.incrementAiEdits(user.id);
+
+    // Send done event
+    res.write(`data: ${JSON.stringify({ type: 'done', code, remaining: remaining - 1 })}\n\n`);
+    res.end();
+  });
+
+  claudeProcess.on('error', (err) => {
+    res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
+    res.end();
+  });
+
+  // Handle client disconnect
+  req.on('close', () => {
+    if (claudeProcess && !claudeProcess.killed) {
+      claudeProcess.kill('SIGTERM');
+    }
+  });
 }
 
 module.exports = { handle };

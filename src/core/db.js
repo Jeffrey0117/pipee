@@ -104,11 +104,21 @@ function initSchema(db) {
       deploy_token TEXT UNIQUE,
       plan TEXT NOT NULL DEFAULT 'free',
       max_sites INTEGER NOT NULL DEFAULT 3,
+      ai_edits_used INTEGER NOT NULL DEFAULT 0,
+      ai_edits_reset_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (deploy_token) REFERENCES deploy_tokens(token)
     );
   `);
+
+  // Migration: add ai_edits columns if missing (existing DBs)
+  try {
+    db.prepare("SELECT ai_edits_used FROM users LIMIT 1").get();
+  } catch {
+    db.exec(`ALTER TABLE users ADD COLUMN ai_edits_used INTEGER NOT NULL DEFAULT 0`);
+    db.exec(`ALTER TABLE users ADD COLUMN ai_edits_reset_at TEXT`);
+  }
 }
 
 // ── Auto-migration from JSON ────────────────
@@ -462,6 +472,11 @@ function createUser({ letmeuse_sub, email, name }) {
   };
 }
 
+function getUsersByEmail(email) {
+  const db = getDb();
+  return db.prepare('SELECT * FROM users WHERE email = ?').all(email);
+}
+
 function updateUser(id, patch) {
   const db = getDb();
   const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
@@ -484,6 +499,39 @@ function updateUser(id, patch) {
 
   db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...values);
   return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+}
+
+// ── AI Edits API ─────────────────────────────
+
+function resetAiEditsIfNeeded(userId) {
+  const db = getDb();
+  const row = db.prepare('SELECT ai_edits_used, ai_edits_reset_at FROM users WHERE id = ?').get(userId);
+  if (!row) return;
+
+  const now = new Date();
+  const resetAt = row.ai_edits_reset_at ? new Date(row.ai_edits_reset_at) : null;
+
+  // Reset if no reset date set, or if current month has passed the reset date
+  if (!resetAt || now >= resetAt) {
+    // Set next reset to first day of next month
+    const nextReset = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    db.prepare('UPDATE users SET ai_edits_used = 0, ai_edits_reset_at = ? WHERE id = ?')
+      .run(nextReset.toISOString(), userId);
+  }
+}
+
+function incrementAiEdits(userId) {
+  const db = getDb();
+  db.prepare('UPDATE users SET ai_edits_used = ai_edits_used + 1 WHERE id = ?').run(userId);
+  const row = db.prepare('SELECT ai_edits_used FROM users WHERE id = ?').get(userId);
+  return row ? row.ai_edits_used : 0;
+}
+
+function getAiEditsRemaining(userId, limit) {
+  const db = getDb();
+  const row = db.prepare('SELECT ai_edits_used FROM users WHERE id = ?').get(userId);
+  if (!row) return 0;
+  return Math.max(0, limit - row.ai_edits_used);
 }
 
 // ── Lifecycle ───────────────────────────────
@@ -525,8 +573,13 @@ module.exports = {
 
   getUserByLetmeuseSub,
   getUserById,
+  getUsersByEmail,
   createUser,
   updateUser,
+
+  resetAiEditsIfNeeded,
+  incrementAiEdits,
+  getAiEditsRemaining,
 
   close,
 
