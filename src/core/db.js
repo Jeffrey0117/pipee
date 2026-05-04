@@ -29,6 +29,7 @@ function getDb() {
   _db.pragma('busy_timeout = 5000');
 
   initSchema(_db);
+  migrateGitFields(_db);
 
   return _db;
 }
@@ -61,6 +62,25 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_sites_user
       ON sites(user_id);
   `);
+}
+
+// ── Git field migration ──────────────────────
+
+function migrateGitFields(db) {
+  const columns = db.prepare("PRAGMA table_info(sites)").all().map(c => c.name);
+
+  if (!columns.includes('repo_url')) {
+    db.exec("ALTER TABLE sites ADD COLUMN repo_url TEXT DEFAULT NULL");
+  }
+  if (!columns.includes('branch')) {
+    db.exec("ALTER TABLE sites ADD COLUMN branch TEXT DEFAULT 'main'");
+  }
+  if (!columns.includes('last_commit')) {
+    db.exec("ALTER TABLE sites ADD COLUMN last_commit TEXT DEFAULT NULL");
+  }
+  if (!columns.includes('deploy_method')) {
+    db.exec("ALTER TABLE sites ADD COLUMN deploy_method TEXT DEFAULT 'upload'");
+  }
 }
 
 // ── Users API ─────────────────────────────────
@@ -129,7 +149,7 @@ function createSite({ slug, userId }) {
 
 function updateSite(slug, fields) {
   const db = getDb();
-  const allowed = ['config', 'size'];
+  const allowed = ['config', 'size', 'repo_url', 'branch', 'last_commit', 'deploy_method'];
   const sets = [];
   const values = [];
   for (const key of allowed) {

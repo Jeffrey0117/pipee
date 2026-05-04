@@ -122,6 +122,17 @@
     html.light .theme-toggle .icon-sun { display: block; }
     html.light .theme-toggle .icon-moon { display: none; }
 
+    /* Git section */
+    .site-git { margin-top: 0.75rem; padding-top: 0.65rem; border-top: 1px solid var(--border); }
+    .git-info { font-size: 0.75rem; color: var(--text-muted); font-family: var(--mono); margin-bottom: 0.5rem; word-break: break-all; }
+    .git-info .git-commit { color: var(--accent); font-weight: 600; }
+    .git-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .btn-git { padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text-dim); font-family: var(--font); transition: all 0.2s; }
+    .btn-git:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+    .btn-git:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-git-primary { background: rgba(124,58,237,0.1); border-color: rgba(124,58,237,0.2); color: var(--accent); }
+    .btn-git-primary:hover:not(:disabled) { background: rgba(124,58,237,0.2); border-color: var(--accent); color: var(--accent-bright); }
+
     .hidden { display: none !important; }
 
     @media (max-width: 600px) {
@@ -241,6 +252,17 @@
     'console.login': { en: 'Login', zh: '登入' },
     'console.updated': { en: 'Updated', zh: '更新於' },
     'console.meta.title': { en: 'Pipee Console', zh: 'Pipee 控制台' },
+    'console.git.linkRepo': { en: 'Link Git Repo', zh: '連結 Git 倉庫' },
+    'console.git.deploy': { en: 'Deploy from Git', zh: '從 Git 部署' },
+    'console.git.deploying': { en: 'Deploying...', zh: '部署中...' },
+    'console.git.commit': { en: 'Commit', zh: '提交' },
+    'console.git.branch': { en: 'Branch', zh: '分支' },
+    'console.git.promptUrl': { en: 'Enter Gitea/Git repo URL:', zh: '輸入 Gitea/Git 倉庫 URL：' },
+    'console.git.promptBranch': { en: 'Branch (default: main):', zh: '分支（預設：main）：' },
+    'console.git.linkFailed': { en: 'Failed to link repo', zh: '連結倉庫失敗' },
+    'console.git.deployConfirm': { en: 'Deploy latest code from git?', zh: '從 Git 部署最新程式碼？' },
+    'console.git.deployed': { en: 'Deployed! Commit:', zh: '部署成功！提交：' },
+    'console.git.deployFailed': { en: 'Deploy failed', zh: '部署失敗' },
     'time.justNow': { en: 'just now', zh: '剛剛' },
     'time.m': { en: 'm ago', zh: '分鐘前' },
     'time.h': { en: 'h ago', zh: '小時前' },
@@ -418,6 +440,38 @@
         var meta = document.createElement('div'); meta.className = 'site-meta';
         meta.innerHTML = '<span>' + escapeHtml(formatSize(s.size)) + '</span><span>' + escapeHtml(t('console.updated')) + ' ' + escapeHtml(formatDate(s.updated_at)) + '</span>';
         card.appendChild(top); card.appendChild(meta);
+
+        // Git section
+        var gitSection = document.createElement('div');
+        gitSection.className = 'site-git';
+        if (s.repo_url) {
+          var gitInfo = document.createElement('div');
+          gitInfo.className = 'git-info';
+          var infoText = escapeHtml(s.repo_url);
+          if (s.branch) infoText += ' (' + escapeHtml(s.branch) + ')';
+          if (s.last_commit) infoText += ' &mdash; <span class="git-commit">' + escapeHtml(s.last_commit.slice(0, 7)) + '</span>';
+          gitInfo.innerHTML = infoText;
+          gitSection.appendChild(gitInfo);
+          var gitActions = document.createElement('div');
+          gitActions.className = 'git-actions';
+          var deployBtn = document.createElement('button');
+          deployBtn.className = 'btn-git btn-git-primary';
+          deployBtn.textContent = t('console.git.deploy');
+          deployBtn.addEventListener('click', function(e) { gitDeploy(s.slug, e); });
+          gitActions.appendChild(deployBtn);
+          gitSection.appendChild(gitActions);
+        } else {
+          var gitActions = document.createElement('div');
+          gitActions.className = 'git-actions';
+          var linkBtn = document.createElement('button');
+          linkBtn.className = 'btn-git';
+          linkBtn.textContent = t('console.git.linkRepo');
+          linkBtn.addEventListener('click', function() { showLinkRepo(s.slug); });
+          gitActions.appendChild(linkBtn);
+          gitSection.appendChild(gitActions);
+        }
+        card.appendChild(gitSection);
+
         $siteList.appendChild(card);
       }
     }
@@ -449,6 +503,70 @@
         if (resp.ok) loadSites();
         else { var err = await resp.json(); alert(err.error || 'Delete failed'); }
       } catch (err) { alert('Delete failed: ' + err.message); }
+    }
+
+    // ── Git ──
+    async function showLinkRepo(slug) {
+      var repoUrl = prompt(t('console.git.promptUrl'));
+      if (!repoUrl) return;
+
+      var branch = prompt(t('console.git.promptBranch'), 'main') || 'main';
+
+      try {
+        var res = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/link-repo', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken,
+          },
+          body: JSON.stringify({ repo_url: repoUrl, branch: branch }),
+        });
+
+        var data = await res.json();
+        if (!res.ok) {
+          alert(data.error || t('console.git.linkFailed'));
+          return;
+        }
+
+        loadSites();
+      } catch (err) {
+        alert(t('console.git.linkFailed') + ': ' + err.message);
+      }
+    }
+
+    async function gitDeploy(slug, e) {
+      if (!confirm(t('console.git.deployConfirm'))) return;
+
+      var btn = e && e.target;
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = t('console.git.deploying');
+      }
+
+      try {
+        var res = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/git-deploy', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + authToken,
+          },
+        });
+
+        var data = await res.json();
+        if (!res.ok) {
+          alert(data.error || t('console.git.deployFailed'));
+          return;
+        }
+
+        alert(t('console.git.deployed') + ' ' + data.commit);
+        loadSites();
+      } catch (err) {
+        alert(t('console.git.deployFailed') + ': ' + err.message);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = t('console.git.deploy');
+        }
+      }
     }
 
     // ── Deploy ──

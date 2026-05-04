@@ -10,6 +10,7 @@ const path = require('path');
 const db = require('./db');
 const { hashPassword, verifyPassword, generateToken, verifyUserRequest } = require('./user-auth');
 const { validateSlug, STATIC_DIR } = require('./static');
+const { deployFromGit } = require('./git-deploy');
 
 const MAX_ARCHIVE_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_EXTRACTED_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -195,6 +196,24 @@ async function handle(req, res, pathname, config) {
     return handleDeleteSite(req, res, slug, config);
   }
 
+  // POST /api/user/sites/:slug/link-repo
+  const linkRepoMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/link-repo$/);
+  if (req.method === 'POST' && linkRepoMatch) {
+    return handleLinkRepo(req, res, linkRepoMatch[1], config);
+  }
+
+  // POST /api/user/sites/:slug/git-deploy
+  const gitDeployMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/git-deploy$/);
+  if (req.method === 'POST' && gitDeployMatch) {
+    return handleGitDeploy(req, res, gitDeployMatch[1], config);
+  }
+
+  // POST /api/webhook/:slug (Gitea push -> auto deploy)
+  const webhookMatch = pathname.match(/^\/api\/webhook\/([a-z0-9][a-z0-9-]*[a-z0-9])$/);
+  if (req.method === 'POST' && webhookMatch) {
+    return handleWebhookDeploy(req, res, webhookMatch[1], config);
+  }
+
   return jsonErr(res, 'Not found', 'NOT_FOUND', 404);
 }
 
@@ -333,6 +352,10 @@ function handleUserSites(req, res, config) {
     url: getSiteUrl(req, s.slug, config),
     size: s.size,
     config: JSON.parse(s.config || '{}'),
+    repo_url: s.repo_url || null,
+    branch: s.branch || null,
+    last_commit: s.last_commit || null,
+    deploy_method: s.deploy_method || 'upload',
     created_at: s.created_at,
     updated_at: s.updated_at,
   }));
@@ -531,6 +554,138 @@ function handleDeleteSite(req, res, slug, config) {
   db.deleteSite(slug);
 
   return jsonOk(res, { deleted: true });
+}
+
+// ── POST /api/user/sites/:slug/link-repo ──
+
+async function handleLinkRepo(req, res, slug, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  const { user } = result;
+  const site = db.getSite(slug);
+  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
+  if (site.user_id !== user.id) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
+
+  let body;
+  try {
+    body = await collectBody(req, 4096);
+  } catch {
+    return jsonErr(res, 'Failed to read body', 'BAD_REQUEST', 400);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(body.toString('utf8'));
+  } catch {
+    return jsonErr(res, 'Invalid JSON', 'BAD_REQUEST', 400);
+  }
+
+  const repoUrl = (data.repo_url || '').trim();
+  const branch = (data.branch || 'main').trim();
+
+  if (!repoUrl) {
+    return jsonErr(res, 'repo_url is required', 'BAD_REQUEST', 400);
+  }
+
+  if (!repoUrl.startsWith('http://') && !repoUrl.startsWith('https://') && !repoUrl.startsWith('git@')) {
+    return jsonErr(res, 'Invalid repo URL', 'BAD_REQUEST', 400);
+  }
+
+  db.updateSite(slug, {
+    repo_url: repoUrl,
+    branch,
+    deploy_method: 'git',
+  });
+
+  return jsonOk(res, {
+    slug,
+    repo_url: repoUrl,
+    branch,
+    deploy_method: 'git',
+  });
+}
+
+// ── POST /api/user/sites/:slug/git-deploy ──
+
+async function handleGitDeploy(req, res, slug, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  const { user } = result;
+  const site = db.getSite(slug);
+  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
+  if (site.user_id !== user.id) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
+
+  if (!site.repo_url) {
+    return jsonErr(res, 'No git repo linked. Use link-repo first.', 'NO_REPO', 400);
+  }
+
+  try {
+    const { commit, size } = deployFromGit(slug, site.repo_url, site.branch || 'main');
+    db.updateSite(slug, { last_commit: commit, size });
+
+    const siteUrl = getSiteUrl(req, slug, config);
+
+    return jsonOk(res, {
+      url: siteUrl,
+      slug,
+      commit: commit.slice(0, 7),
+      size,
+    });
+  } catch (err) {
+    if (err.message === 'NO_INDEX_HTML') {
+      return jsonErr(res, 'Repository must contain index.html at the root', 'NO_INDEX_HTML', 400);
+    }
+    return jsonErr(res, 'Git deploy failed', 'DEPLOY_FAILED', 500);
+  }
+}
+
+// ── POST /api/webhook/:slug (Gitea auto-deploy) ──
+
+async function handleWebhookDeploy(req, res, slug, config) {
+  const site = db.getSite(slug);
+  if (!site) {
+    res.writeHead(404, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Site not found' }));
+  }
+
+  if (!site.repo_url || site.deploy_method !== 'git') {
+    res.writeHead(400, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Site not configured for git deploy' }));
+  }
+
+  // Verify Gitea signature if webhook secret is set
+  const siteConfig = JSON.parse(site.config || '{}');
+  if (siteConfig.webhookSecret) {
+    let body;
+    try {
+      body = await collectBody(req, 1024 * 1024);
+    } catch {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Failed to read body' }));
+    }
+
+    const crypto = require('crypto');
+    const signature = req.headers['x-gitea-signature'] || '';
+    const expected = crypto.createHmac('sha256', siteConfig.webhookSecret).update(body).digest('hex');
+    if (signature !== expected) {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Invalid signature' }));
+    }
+  }
+
+  // Respond immediately, deploy in background
+  res.writeHead(200, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({ success: true, message: 'Deploy triggered' }));
+
+  try {
+    const { commit, size } = deployFromGit(slug, site.repo_url, site.branch || 'main');
+    db.updateSite(slug, { last_commit: commit, size });
+    console.log(`[webhook] Deployed ${slug} from git (${commit.slice(0, 7)})`);
+  } catch (err) {
+    console.error(`[webhook] Git deploy failed for ${slug}:`, err.message);
+  }
 }
 
 module.exports = { handle };
