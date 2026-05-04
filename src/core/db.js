@@ -30,6 +30,7 @@ function getDb() {
 
   initSchema(_db);
   migrateGitFields(_db);
+  migrateAiFields(_db);
 
   return _db;
 }
@@ -62,6 +63,19 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_sites_user
       ON sites(user_id);
   `);
+}
+
+// ── AI quota migration ──────────────────────
+
+function migrateAiFields(db) {
+  const columns = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+
+  if (!columns.includes('ai_edits_used')) {
+    db.exec("ALTER TABLE users ADD COLUMN ai_edits_used INTEGER DEFAULT 0");
+  }
+  if (!columns.includes('ai_edits_reset_at')) {
+    db.exec("ALTER TABLE users ADD COLUMN ai_edits_reset_at TEXT DEFAULT NULL");
+  }
 }
 
 // ── Git field migration ──────────────────────
@@ -110,7 +124,7 @@ function createUser({ username, passwordHash, salt, token }) {
 
 function updateUser(id, fields) {
   const db = getDb();
-  const allowed = ['username', 'password_hash', 'salt', 'token', 'plan', 'max_sites'];
+  const allowed = ['username', 'password_hash', 'salt', 'token', 'plan', 'max_sites', 'ai_edits_used', 'ai_edits_reset_at'];
   const sets = [];
   const values = [];
   for (const key of allowed) {

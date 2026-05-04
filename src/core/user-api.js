@@ -12,6 +12,11 @@ const { hashPassword, verifyPassword, generateToken, verifyUserRequest } = requi
 const { validateSlug, STATIC_DIR } = require('./static');
 const { deployFromGit } = require('./git-deploy');
 const gitea = require('./gitea');
+const aiEditor = require('./ai-editor');
+const aiSessions = require('./ai-sessions');
+
+const AI_EDITS_PER_MONTH = 200;
+const AI_ALLOWED_PLANS = new Set(['pro', 'creator']);
 
 const MAX_ARCHIVE_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_EXTRACTED_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -215,6 +220,24 @@ async function handle(req, res, pathname, config) {
     return handleWebhookDeploy(req, res, webhookMatch[1], config);
   }
 
+  // POST /api/user/sites/:slug/ai-chat
+  const aiChatMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/ai-chat$/);
+  if (req.method === 'POST' && aiChatMatch) {
+    return handleAiChat(req, res, aiChatMatch[1], config);
+  }
+
+  // DELETE /api/user/sites/:slug/ai-chat (clear session)
+  const aiClearMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/ai-chat$/);
+  if (req.method === 'DELETE' && aiClearMatch) {
+    return handleAiClearSession(req, res, aiClearMatch[1], config);
+  }
+
+  // GET /api/user/sites/:slug/files
+  const filesMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/files$/);
+  if (req.method === 'GET' && filesMatch) {
+    return handleListFiles(req, res, filesMatch[1], config);
+  }
+
   return jsonErr(res, 'Not found', 'NOT_FOUND', 404);
 }
 
@@ -337,6 +360,8 @@ function handleMe(req, res, config) {
       plan: user.plan,
       max_sites: user.max_sites,
       site_count: siteCount,
+      ai_edits_used: user.ai_edits_used || 0,
+      ai_edits_limit: AI_EDITS_PER_MONTH,
     },
   });
 }
@@ -718,6 +743,154 @@ async function handleWebhookDeploy(req, res, slug, config) {
   } catch (err) {
     console.error(`[webhook] Git deploy failed for ${slug}:`, err.message);
   }
+}
+
+// ── AI Quota helpers ──
+
+function checkAiQuota(user) {
+  const now = new Date();
+  const resetAt = user.ai_edits_reset_at ? new Date(user.ai_edits_reset_at) : null;
+
+  // Reset monthly quota if past reset date
+  if (!resetAt || now >= resetAt) {
+    const nextReset = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+    db.updateUser(user.id, { ai_edits_used: 0, ai_edits_reset_at: nextReset });
+    return { allowed: true, used: 0, limit: AI_EDITS_PER_MONTH };
+  }
+
+  return {
+    allowed: (user.ai_edits_used || 0) < AI_EDITS_PER_MONTH,
+    used: user.ai_edits_used || 0,
+    limit: AI_EDITS_PER_MONTH,
+  };
+}
+
+// ── POST /api/user/sites/:slug/ai-chat ──
+
+async function handleAiChat(req, res, slug, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  const { user } = result;
+
+  // Plan check
+  if (!AI_ALLOWED_PLANS.has(user.plan)) {
+    return jsonErr(res, 'AI Editor requires a Pro plan. Upgrade to unlock.', 'PLAN_REQUIRED', 403);
+  }
+
+  // API key check
+  const apiKey = config.anthropicApiKey;
+  if (!apiKey) {
+    return jsonErr(res, 'AI Editor is not configured on this server', 'NOT_CONFIGURED', 503);
+  }
+
+  // Ownership check
+  const site = db.getSite(slug);
+  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
+  if (site.user_id !== user.id) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
+
+  // Quota check
+  const quota = checkAiQuota(user);
+  if (!quota.allowed) {
+    return jsonErr(res, `Monthly AI edit limit reached (${quota.limit}). Resets next month.`, 'QUOTA_EXCEEDED', 429);
+  }
+
+  // Parse message
+  let body;
+  try {
+    body = await collectBody(req, 16384);
+  } catch {
+    return jsonErr(res, 'Failed to read body', 'BAD_REQUEST', 400);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(body.toString('utf8'));
+  } catch {
+    return jsonErr(res, 'Invalid JSON', 'BAD_REQUEST', 400);
+  }
+
+  const message = (data.message || '').trim();
+  if (!message) {
+    return jsonErr(res, 'Message is required', 'BAD_REQUEST', 400);
+  }
+
+  if (message.length > 4000) {
+    return jsonErr(res, 'Message too long (max 4000 characters)', 'BAD_REQUEST', 400);
+  }
+
+  // Get existing conversation
+  const history = aiSessions.getSession(user.id, slug) || [];
+
+  try {
+    const aiResult = await aiEditor.chat(slug, message, history, apiKey);
+
+    // Save updated conversation
+    aiSessions.setSession(user.id, slug, aiResult.conversationHistory);
+
+    // Increment quota if files were changed (re-read user for atomic update)
+    if (aiResult.filesChanged.length > 0) {
+      const freshUser = db.getUserById(user.id);
+      const currentUsed = freshUser.ai_edits_used || 0;
+      db.updateUser(user.id, { ai_edits_used: currentUsed + 1 });
+
+      // Update site size
+      const siteDir = path.join(STATIC_DIR, slug);
+      if (fs.existsSync(siteDir)) {
+        const newSize = getDirSize(siteDir);
+        db.updateSite(slug, { size: newSize });
+      }
+    }
+
+    const freshQuota = checkAiQuota(db.getUserById(user.id));
+
+    return jsonOk(res, {
+      reply: aiResult.reply,
+      filesChanged: aiResult.filesChanged,
+      quota: { used: freshQuota.used, limit: freshQuota.limit },
+    });
+  } catch (err) {
+    console.error('[ai-editor] Chat error:', err.message);
+    // Don't leak internal API error details to client
+    const safeMsg = err.message && err.message.includes('timeout')
+      ? 'AI request timed out. Please try again.'
+      : 'AI request failed. Please try again.';
+    return jsonErr(res, safeMsg, 'AI_ERROR', 502);
+  }
+}
+
+// ── DELETE /api/user/sites/:slug/ai-chat ──
+
+function handleAiClearSession(req, res, slug, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  const { user } = result;
+
+  // Ownership check
+  const site = db.getSite(slug);
+  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
+  if (site.user_id !== user.id) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
+
+  aiSessions.clearSession(user.id, slug);
+
+  return jsonOk(res, { cleared: true });
+}
+
+// ── GET /api/user/sites/:slug/files ──
+
+function handleListFiles(req, res, slug, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  const { user } = result;
+  const site = db.getSite(slug);
+  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
+  if (site.user_id !== user.id) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
+
+  const files = aiEditor.listSiteFiles(slug);
+
+  return jsonOk(res, { files, total: files.length });
 }
 
 module.exports = { handle };

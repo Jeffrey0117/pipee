@@ -117,6 +117,35 @@ const T = {
 
   // ── Theme toggle ──
   'theme.toggle': { en: 'Toggle theme', zh: '切換主題' },
+
+  // ── Console: Git ──
+  'console.git.cloneHint': { en: 'Clone URL:', zh: '複製 URL：' },
+  'console.git.copied': { en: 'Copied!', zh: '已複製！' },
+  'console.git.noRepo': { en: 'No git repo linked', zh: '尚未連結 Git 儲存庫' },
+  'console.git.linkRepo': { en: 'Link Repo', zh: '連結儲存庫' },
+  'console.git.deploy': { en: 'Git Deploy', zh: 'Git 部署' },
+  'console.git.deploying': { en: 'Deploying...', zh: '部署中...' },
+  'console.git.deployed': { en: 'Deployed! Commit:', zh: '部署成功！Commit：' },
+  'console.git.deployConfirm': { en: 'Deploy latest from git?', zh: '從 Git 部署最新版？' },
+  'console.git.deployFailed': { en: 'Git deploy failed', zh: 'Git 部署失敗' },
+  'console.git.linkFailed': { en: 'Failed to link repo', zh: '連結儲存庫失敗' },
+  'console.git.promptUrl': { en: 'Enter git repo URL:', zh: '輸入 Git 儲存庫 URL：' },
+  'console.git.promptBranch': { en: 'Branch (default: main):', zh: '分支（預設：main）：' },
+
+  // ── Console: AI Editor ──
+  'console.ai.btn': { en: 'AI Editor', zh: 'AI 編輯器' },
+  'console.ai.title': { en: 'AI Editor', zh: 'AI 編輯器' },
+  'console.ai.placeholder': { en: 'Tell Claude what to change...', zh: '告訴 Claude 要改什麼...' },
+  'console.ai.send': { en: 'Send', zh: '送出' },
+  'console.ai.sending': { en: 'Thinking...', zh: '思考中...' },
+  'console.ai.clear': { en: 'New Chat', zh: '新對話' },
+  'console.ai.close': { en: 'Close', zh: '關閉' },
+  'console.ai.proBadge': { en: 'PRO', zh: 'PRO' },
+  'console.ai.upgrade': { en: 'Upgrade to Pro to unlock AI Editor', zh: '升級至 Pro 解鎖 AI 編輯器' },
+  'console.ai.quota': { en: 'edits this month', zh: '次編輯（本月）' },
+  'console.ai.filesChanged': { en: 'Files changed:', zh: '已修改檔案：' },
+  'console.ai.welcome': { en: 'Hi! I can help you edit your website. Try "change the background to dark blue" or "add a contact section".', zh: '嗨！我可以幫你編輯網站。試試「把背景改成深藍色」或「加一個聯絡區塊」。' },
+  'console.ai.error': { en: 'AI request failed', zh: 'AI 請求失敗' },
 };
 
 // ── Language detection & persistence ──

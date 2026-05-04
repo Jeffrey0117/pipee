@@ -141,6 +141,37 @@
     .btn-copy:hover { color: var(--text); border-color: var(--accent); }
     .btn-copy.copied { color: var(--green); border-color: var(--green); }
 
+    /* AI Editor */
+    .btn-ai { padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: 1px solid rgba(124,58,237,0.3); background: rgba(124,58,237,0.08); color: var(--accent); font-family: var(--font); transition: all 0.2s; }
+    .btn-ai:hover { background: rgba(124,58,237,0.18); border-color: var(--accent); color: var(--accent-bright); }
+    .btn-ai .pro-badge { font-size: 0.6rem; background: var(--accent); color: #fff; padding: 1px 4px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
+
+    .ai-panel { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+    .ai-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+    .ai-panel-title { font-size: 0.85rem; font-weight: 700; color: var(--accent); }
+    .ai-panel-actions { display: flex; gap: 0.5rem; }
+    .ai-panel-actions button { padding: 0.2rem 0.5rem; border-radius: 5px; font-size: 0.68rem; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-family: var(--font); transition: all 0.2s; }
+    .ai-panel-actions button:hover { color: var(--text); border-color: var(--text-muted); }
+    .ai-quota { font-size: 0.68rem; color: var(--text-muted); margin-left: 0.5rem; }
+
+    .ai-messages { max-height: 360px; overflow-y: auto; margin-bottom: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 4px; }
+    .ai-msg { padding: 0.6rem 0.85rem; border-radius: 10px; font-size: 0.82rem; line-height: 1.55; max-width: 92%; word-break: break-word; }
+    .ai-msg.user { background: rgba(124,58,237,0.12); color: var(--text); align-self: flex-end; border-bottom-right-radius: 3px; }
+    .ai-msg.assistant { background: var(--bg); border: 1px solid var(--border); color: var(--text); align-self: flex-start; border-bottom-left-radius: 3px; }
+    .ai-msg.assistant code { font-family: var(--mono); font-size: 0.78rem; background: rgba(124,58,237,0.08); padding: 1px 4px; border-radius: 3px; }
+    .ai-msg.assistant pre { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; margin: 0.4rem 0; overflow-x: auto; font-family: var(--mono); font-size: 0.75rem; }
+    .ai-msg.system { font-size: 0.72rem; color: var(--green); align-self: center; font-style: italic; }
+    .ai-msg.error { font-size: 0.72rem; color: var(--red); align-self: center; }
+
+    .ai-input-row { display: flex; gap: 0.5rem; }
+    .ai-input { flex: 1; padding: 0.6rem 0.85rem; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: var(--font); font-size: 0.85rem; outline: none; resize: none; min-height: 40px; max-height: 120px; }
+    .ai-input:focus { border-color: var(--accent); }
+    .ai-send { padding: 0.6rem 1.2rem; border-radius: 10px; font-family: var(--font); font-size: 0.82rem; font-weight: 700; cursor: pointer; border: none; background: var(--cta); color: #fff; transition: all 0.2s; flex-shrink: 0; }
+    .ai-send:hover:not(:disabled) { background: var(--cta-hover); }
+    .ai-send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .ai-files-changed { font-size: 0.72rem; color: var(--green); margin-top: 0.25rem; font-family: var(--mono); }
+
     .hidden { display: none !important; }
 
     @media (max-width: 600px) {
@@ -444,6 +475,13 @@
         var link = document.createElement('a'); link.href = s.url; link.target = '_blank'; link.className = 'site-url'; link.textContent = s.slug;
         left.appendChild(dot); left.appendChild(link);
         var right = document.createElement('div'); right.className = 'site-card-right';
+        // AI Editor button
+        if (currentUser && (currentUser.plan === 'pro' || currentUser.plan === 'creator')) {
+          var aiBtn = document.createElement('button'); aiBtn.className = 'btn-ai';
+          aiBtn.innerHTML = t('console.ai.btn') + ' <span class="pro-badge">PRO</span>';
+          aiBtn.addEventListener('click', function() { toggleAiPanel(s.slug, card); });
+          right.appendChild(aiBtn);
+        }
         var delBtn = document.createElement('button'); delBtn.className = 'btn-delete'; delBtn.textContent = t('console.delete');
         delBtn.addEventListener('click', function() { deleteSite(s.slug); });
         right.appendChild(delBtn);
@@ -704,6 +742,160 @@
     function showStatus(type, msg) {
       $deployStatus.className = 'deploy-status ' + type;
       $deployStatus.innerHTML = msg;
+    }
+
+    // ── AI Editor ──
+    var aiOpenSlug = null;
+
+    function toggleAiPanel(slug, card) {
+      // Close existing panel if open
+      var existing = card.querySelector('.ai-panel');
+      if (existing) {
+        existing.remove();
+        if (aiOpenSlug === slug) { aiOpenSlug = null; return; }
+      }
+
+      aiOpenSlug = slug;
+
+      var panel = document.createElement('div');
+      panel.className = 'ai-panel';
+      panel.innerHTML =
+        '<div class="ai-panel-header">' +
+          '<div><span class="ai-panel-title">' + escapeHtml(t('console.ai.title')) + '</span><span class="ai-quota" id="ai-quota-' + slug + '"></span></div>' +
+          '<div class="ai-panel-actions">' +
+            '<button onclick="clearAiSession(\'' + slug + '\', this)">' + escapeHtml(t('console.ai.clear')) + '</button>' +
+            '<button onclick="closeAiPanel(this)">' + escapeHtml(t('console.ai.close')) + '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="ai-messages" id="ai-msgs-' + slug + '">' +
+          '<div class="ai-msg assistant">' + escapeHtml(t('console.ai.welcome')) + '</div>' +
+        '</div>' +
+        '<div class="ai-input-row">' +
+          '<textarea class="ai-input" id="ai-input-' + slug + '" placeholder="' + escapeHtml(t('console.ai.placeholder')) + '" rows="1" onkeydown="aiInputKeydown(event, \'' + slug + '\')"></textarea>' +
+          '<button class="ai-send" id="ai-send-' + slug + '" onclick="sendAiMessage(\'' + slug + '\')">' + escapeHtml(t('console.ai.send')) + '</button>' +
+        '</div>';
+      card.appendChild(panel);
+
+      // Auto-resize textarea
+      var textarea = document.getElementById('ai-input-' + slug);
+      textarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+      });
+      textarea.focus();
+    }
+
+    function closeAiPanel(btn) {
+      var panel = btn.closest('.ai-panel');
+      if (panel) panel.remove();
+      aiOpenSlug = null;
+    }
+
+    function aiInputKeydown(e, slug) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendAiMessage(slug);
+      }
+    }
+
+    async function sendAiMessage(slug) {
+      var input = document.getElementById('ai-input-' + slug);
+      var sendBtn = document.getElementById('ai-send-' + slug);
+      var msgsDiv = document.getElementById('ai-msgs-' + slug);
+      if (!input || !sendBtn || !msgsDiv) return;
+
+      var message = input.value.trim();
+      if (!message) return;
+
+      // Add user message to UI
+      var userMsg = document.createElement('div');
+      userMsg.className = 'ai-msg user';
+      userMsg.textContent = message;
+      msgsDiv.appendChild(userMsg);
+
+      input.value = '';
+      input.style.height = 'auto';
+      sendBtn.disabled = true;
+      sendBtn.textContent = t('console.ai.sending');
+
+      // Scroll to bottom
+      msgsDiv.scrollTop = msgsDiv.scrollHeight;
+
+      try {
+        var resp = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/ai-chat', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: message }),
+        });
+        var data = await resp.json();
+
+        if (!resp.ok) {
+          var errMsg = document.createElement('div');
+          errMsg.className = 'ai-msg error';
+          errMsg.textContent = data.error || t('console.ai.error');
+          msgsDiv.appendChild(errMsg);
+        } else {
+          // Assistant reply
+          var assistantMsg = document.createElement('div');
+          assistantMsg.className = 'ai-msg assistant';
+          assistantMsg.innerHTML = formatAiReply(data.reply);
+          msgsDiv.appendChild(assistantMsg);
+
+          // Files changed
+          if (data.filesChanged && data.filesChanged.length > 0) {
+            var filesMsg = document.createElement('div');
+            filesMsg.className = 'ai-msg system';
+            filesMsg.textContent = t('console.ai.filesChanged') + ' ' + data.filesChanged.map(function(f) { return f.path; }).join(', ');
+            msgsDiv.appendChild(filesMsg);
+          }
+
+          // Update quota
+          if (data.quota) {
+            var quotaEl = document.getElementById('ai-quota-' + slug);
+            if (quotaEl) quotaEl.textContent = data.quota.used + '/' + data.quota.limit + ' ' + t('console.ai.quota');
+          }
+        }
+      } catch (err) {
+        var errMsg2 = document.createElement('div');
+        errMsg2.className = 'ai-msg error';
+        errMsg2.textContent = t('console.ai.error') + ': ' + err.message;
+        msgsDiv.appendChild(errMsg2);
+      }
+
+      sendBtn.disabled = false;
+      sendBtn.textContent = t('console.ai.send');
+      msgsDiv.scrollTop = msgsDiv.scrollHeight;
+    }
+
+    async function clearAiSession(slug, btn) {
+      try {
+        await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/ai-chat', {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+      } catch { /* ignore */ }
+
+      var msgsDiv = document.getElementById('ai-msgs-' + slug);
+      if (msgsDiv) {
+        msgsDiv.innerHTML = '<div class="ai-msg assistant">' + escapeHtml(t('console.ai.welcome')) + '</div>';
+      }
+    }
+
+    function formatAiReply(text) {
+      if (!text) return '';
+      // Simple markdown-like formatting
+      var html = escapeHtml(text);
+      // Code blocks: ```...```
+      html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(m, lang, code) {
+        return '<pre>' + code + '</pre>';
+      });
+      // Inline code: `...`
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+      // Bold: **...**
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      // Newlines
+      html = html.replace(/\n/g, '<br>');
+      return html;
     }
 
     init();
