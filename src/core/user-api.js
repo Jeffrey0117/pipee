@@ -11,6 +11,7 @@ const db = require('./db');
 const { hashPassword, verifyPassword, generateToken, verifyUserRequest } = require('./user-auth');
 const { validateSlug, STATIC_DIR } = require('./static');
 const { deployFromGit } = require('./git-deploy');
+const gitea = require('./gitea');
 
 const MAX_ARCHIVE_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_EXTRACTED_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -412,9 +413,33 @@ async function handleCreateSite(req, res, config) {
     fs.mkdirSync(siteDir, { recursive: true });
   }
 
+  // Auto-create Gitea repo if configured
+  let repoInfo = null;
+  if (gitea.isEnabled()) {
+    try {
+      repoInfo = await gitea.createSiteRepo(slug, config.externalUrl);
+      if (repoInfo) {
+        const siteConfig = { webhookSecret: repoInfo.webhook_secret };
+        db.updateSite(slug, {
+          repo_url: repoInfo.clone_url,
+          branch: 'main',
+          deploy_method: 'git',
+          config: JSON.stringify(siteConfig),
+        });
+      }
+    } catch (err) {
+      console.error(`[pipee] Failed to create Gitea repo for ${slug}:`, err.message);
+      // Non-fatal — site is still created, just without git
+    }
+  }
+
   return jsonOk(res, {
     slug: site.slug,
     url: getSiteUrl(req, slug, config),
+    repo: repoInfo ? {
+      clone_url: repoInfo.clone_url,
+      web_url: repoInfo.web_url,
+    } : null,
   }, 201);
 }
 
@@ -537,7 +562,7 @@ async function handleUpdateSettings(req, res, slug, config) {
 
 // ── DELETE /api/user/sites/:slug ──
 
-function handleDeleteSite(req, res, slug, config) {
+async function handleDeleteSite(req, res, slug, config) {
   const result = verifyUserRequest(req, config);
   if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
 
@@ -549,6 +574,13 @@ function handleDeleteSite(req, res, slug, config) {
   // Delete files
   const siteDir = path.join(STATIC_DIR, slug);
   try { fs.rmSync(siteDir, { recursive: true, force: true }); } catch { /* ignore */ }
+
+  // Clean up Gitea repo (best effort)
+  if (gitea.isEnabled() && site.repo_url) {
+    try { await gitea.deleteSiteRepo(slug); } catch (err) {
+      console.error(`[pipee] Failed to delete Gitea repo for ${slug}:`, err.message);
+    }
+  }
 
   // Delete DB record
   db.deleteSite(slug);

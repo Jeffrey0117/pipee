@@ -29,12 +29,21 @@ function loadConfig() {
     config = {};
   }
 
+  const port = config.port || parseInt(process.env.PORT, 10) || 3939;
+  const domain = config.domain || 'localhost';
+  const isLocal = domain === 'localhost' || domain === '127.0.0.1';
+  const externalUrl = isLocal
+    ? `http://localhost:${port}`
+    : `https://${domain}`;
+
   return {
-    port: config.port || parseInt(process.env.PORT, 10) || 3939,
-    domain: config.domain || 'localhost',
+    port,
+    domain,
+    externalUrl,
     jwtSecret: config.jwtSecret || 'change-this-to-a-random-string',
     maxSites: config.maxSites || 10,
     maxSiteSize: config.maxSiteSize || 52428800,
+    gitea: config.gitea || {},
   };
 }
 

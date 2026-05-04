@@ -133,6 +133,14 @@
     .btn-git-primary { background: rgba(124,58,237,0.1); border-color: rgba(124,58,237,0.2); color: var(--accent); }
     .btn-git-primary:hover:not(:disabled) { background: rgba(124,58,237,0.2); border-color: var(--accent); color: var(--accent-bright); }
 
+    .clone-url-wrap { display: flex; align-items: center; gap: 0.5rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 0.6rem; margin-top: 0.4rem; margin-bottom: 0.5rem; }
+    .clone-url-label { font-size: 0.7rem; color: var(--text-muted); white-space: nowrap; }
+    .clone-url-text { flex: 1; font-size: 0.78rem; font-family: var(--mono); color: var(--accent); word-break: break-all; cursor: pointer; }
+    .clone-url-text:hover { color: var(--accent-bright); }
+    .btn-copy { padding: 0.2rem 0.5rem; border-radius: 5px; font-size: 0.68rem; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-family: var(--font); transition: all 0.2s; flex-shrink: 0; }
+    .btn-copy:hover { color: var(--text); border-color: var(--accent); }
+    .btn-copy.copied { color: var(--green); border-color: var(--green); }
+
     .hidden { display: none !important; }
 
     @media (max-width: 600px) {
@@ -263,6 +271,9 @@
     'console.git.deployConfirm': { en: 'Deploy latest code from git?', zh: '從 Git 部署最新程式碼？' },
     'console.git.deployed': { en: 'Deployed! Commit:', zh: '部署成功！提交：' },
     'console.git.deployFailed': { en: 'Deploy failed', zh: '部署失敗' },
+    'console.git.cloneHint': { en: 'Push to deploy:', zh: '推送即部署：' },
+    'console.git.copied': { en: 'Copied!', zh: '已複製！' },
+    'console.git.noRepo': { en: 'No git repo (upload only)', zh: '無 Git 倉庫（僅上傳）' },
     'time.justNow': { en: 'just now', zh: '剛剛' },
     'time.m': { en: 'm ago', zh: '分鐘前' },
     'time.h': { en: 'h ago', zh: '小時前' },
@@ -445,13 +456,34 @@
         var gitSection = document.createElement('div');
         gitSection.className = 'site-git';
         if (s.repo_url) {
+          // Clone URL bar (prominent)
+          var cloneWrap = document.createElement('div');
+          cloneWrap.className = 'clone-url-wrap';
+          var cloneLabel = document.createElement('span');
+          cloneLabel.className = 'clone-url-label';
+          cloneLabel.textContent = t('console.git.cloneHint');
+          var cloneText = document.createElement('span');
+          cloneText.className = 'clone-url-text';
+          cloneText.textContent = s.repo_url;
+          cloneText.title = s.repo_url;
+          var copyBtn = document.createElement('button');
+          copyBtn.className = 'btn-copy';
+          copyBtn.textContent = 'Copy';
+          var repoUrlForCopy = s.repo_url;
+          copyBtn.addEventListener('click', function() { copyCloneUrl(repoUrlForCopy, copyBtn); });
+          cloneText.addEventListener('click', function() { copyCloneUrl(repoUrlForCopy, copyBtn); });
+          cloneWrap.appendChild(cloneLabel);
+          cloneWrap.appendChild(cloneText);
+          cloneWrap.appendChild(copyBtn);
+          gitSection.appendChild(cloneWrap);
+
+          // Branch + commit info + deploy button
           var gitInfo = document.createElement('div');
           gitInfo.className = 'git-info';
-          var infoText = escapeHtml(s.repo_url);
-          if (s.branch) infoText += ' (' + escapeHtml(s.branch) + ')';
+          var infoText = '';
+          if (s.branch) infoText += escapeHtml(s.branch);
           if (s.last_commit) infoText += ' &mdash; <span class="git-commit">' + escapeHtml(s.last_commit.slice(0, 7)) + '</span>';
-          gitInfo.innerHTML = infoText;
-          gitSection.appendChild(gitInfo);
+          if (infoText) { gitInfo.innerHTML = infoText; gitSection.appendChild(gitInfo); }
           var gitActions = document.createElement('div');
           gitActions.className = 'git-actions';
           var deployBtn = document.createElement('button');
@@ -461,6 +493,10 @@
           gitActions.appendChild(deployBtn);
           gitSection.appendChild(gitActions);
         } else {
+          var noRepoText = document.createElement('div');
+          noRepoText.className = 'git-info';
+          noRepoText.textContent = t('console.git.noRepo');
+          gitSection.appendChild(noRepoText);
           var gitActions = document.createElement('div');
           gitActions.className = 'git-actions';
           var linkBtn = document.createElement('button');
@@ -506,6 +542,25 @@
     }
 
     // ── Git ──
+    function copyCloneUrl(url, btn) {
+      navigator.clipboard.writeText('git clone ' + url).then(function() {
+        btn.textContent = t('console.git.copied');
+        btn.classList.add('copied');
+        setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+      }).catch(function() {
+        // Fallback: select text
+        var ta = document.createElement('textarea');
+        ta.value = 'git clone ' + url;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.textContent = t('console.git.copied');
+        btn.classList.add('copied');
+        setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+      });
+    }
+
     async function showLinkRepo(slug) {
       var repoUrl = prompt(t('console.git.promptUrl'));
       if (!repoUrl) return;
@@ -606,11 +661,13 @@
 
       try {
         // Create site (ignore 409 if already exists)
-        await fetch('/api/user/sites', {
+        var createResp = await fetch('/api/user/sites', {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
           body: JSON.stringify({ slug: slug }),
         });
+        var createData = null;
+        try { createData = await createResp.json(); } catch { /* ignore */ }
 
         // Deploy
         var arrayBuffer = await selectedFile.arrayBuffer();
@@ -622,7 +679,11 @@
         var data = await resp.json();
         if (resp.ok) {
           var safeUrl = escapeHtml(data.url);
-          showStatus('success', t('console.deploy.success') + ' <a href="' + safeUrl + '" target="_blank" style="color:var(--green);font-weight:600">' + safeUrl + '</a>');
+          var msg = t('console.deploy.success') + ' <a href="' + safeUrl + '" target="_blank" style="color:var(--green);font-weight:600">' + safeUrl + '</a>';
+          if (createData && createData.repo && createData.repo.clone_url) {
+            msg += '<br><span style="font-size:0.85rem;color:var(--text-dim)">' + escapeHtml(t('console.git.cloneHint')) + '</span> <code style="font-family:var(--mono);color:var(--accent);font-size:0.82rem">git clone ' + escapeHtml(createData.repo.clone_url) + '</code>';
+          }
+          showStatus('success', msg);
           selectedFile = null;
           $selectedFile.classList.add('hidden');
           $fileInput.value = '';

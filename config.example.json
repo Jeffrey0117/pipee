@@ -3,5 +3,10 @@
   "domain": "localhost",
   "jwtSecret": "change-this-to-a-random-string",
   "maxSites": 10,
-  "maxSiteSize": 52428800
+  "maxSiteSize": 52428800,
+  "gitea": {
+    "url": "",
+    "token": "",
+    "owner": "pipee"
+  }
 }
