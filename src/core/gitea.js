@@ -86,8 +86,8 @@ async function createSiteRepo(slug, pipeeBaseUrl) {
 
   const owner = getOwner();
 
-  // Create the repo
-  const repo = await giteaFetch('/user/repos', {
+  // Create the repo under the org (not the token user)
+  const repo = await giteaFetch(`/orgs/${owner}/repos`, {
     method: 'POST',
     body: {
       name: slug,
