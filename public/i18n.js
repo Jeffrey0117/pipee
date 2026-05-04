@@ -49,6 +49,38 @@ const T = {
   'feature.multi.title': { en: 'Multi-User', zh: '多用戶' },
   'feature.multi.desc': { en: 'Multiple users can register and manage their own sites independently. Configurable site limits.', zh: '多用戶可獨立註冊並管理各自的網站，可設定網站數量上限。' },
 
+  // ── Index: Pricing ──
+  'pricing.label': { en: 'Pricing', zh: '定價方案' },
+  'pricing.title': { en: 'Simple plans.', zh: '簡單方案。' },
+  'pricing.titleLine2': { en: 'Scale when you need to.', zh: '需要時再升級。' },
+  'pricing.period': { en: '/mo', zh: '/月' },
+  'pricing.popular': { en: 'Popular', zh: '最受歡迎' },
+
+  'pricing.free.name': { en: 'Free', zh: '免費版' },
+  'pricing.free.desc': { en: 'Get started with static site hosting.', zh: '開始使用靜態網站託管。' },
+  'pricing.free.f1': { en: '3 sites', zh: '3 個網站' },
+  'pricing.free.f2': { en: 'ZIP upload deploy', zh: 'ZIP 上傳部署' },
+  'pricing.free.f3': { en: 'Subdomain routing', zh: '子網域路由' },
+  'pricing.free.f4': { en: 'Git deploy', zh: 'Git 部署' },
+  'pricing.free.f5': { en: 'AI Editor', zh: 'AI 編輯器' },
+  'pricing.free.cta': { en: 'Get Started', zh: '開始使用' },
+
+  'pricing.pro.name': { en: 'Pro', zh: 'Pro' },
+  'pricing.pro.desc': { en: 'For serious builders and creators.', zh: '給認真的建造者和創作者。' },
+  'pricing.pro.f1': { en: '20 sites', zh: '20 個網站' },
+  'pricing.pro.f2': { en: 'Everything in Free', zh: '包含免費版所有功能' },
+  'pricing.pro.f3': { en: 'AI Editor (200/mo)', zh: 'AI 編輯器（200 次/月）' },
+  'pricing.pro.f4': { en: 'Priority support', zh: '優先支援' },
+  'pricing.pro.cta': { en: 'Upgrade to Pro', zh: '升級至 Pro' },
+
+  'pricing.creator.name': { en: 'Creator', zh: 'Creator' },
+  'pricing.creator.desc': { en: 'Unlimited power for agencies and teams.', zh: '為團隊和機構提供無限力量。' },
+  'pricing.creator.f1': { en: '100 sites', zh: '100 個網站' },
+  'pricing.creator.f2': { en: 'Everything in Pro', zh: '包含 Pro 所有功能' },
+  'pricing.creator.f3': { en: 'Unlimited AI edits', zh: '無限 AI 編輯' },
+  'pricing.creator.f4': { en: 'Admin dashboard', zh: '管理員儀表板' },
+  'pricing.creator.cta': { en: 'Go Creator', zh: '成為 Creator' },
+
   // ── Index: How It Works ──
   'how.label': { en: 'How It Works', zh: '運作方式' },
   'how.title': { en: 'Three steps. That\'s it.', zh: '三個步驟，就這樣。' },

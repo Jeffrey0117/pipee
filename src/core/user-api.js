@@ -15,7 +15,7 @@ const gitea = require('./gitea');
 const aiEditor = require('./ai-editor');
 const aiSessions = require('./ai-sessions');
 
-const AI_EDITS_PER_MONTH = 200;
+const { PLANS } = db;
 const AI_ALLOWED_PLANS = new Set(['pro', 'creator']);
 
 const MAX_ARCHIVE_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -352,16 +352,19 @@ function handleMe(req, res, config) {
 
   const { user } = result;
   const siteCount = db.countSitesByUser(user.id);
+  const planConfig = PLANS[user.plan] || PLANS.free;
 
   return jsonOk(res, {
     user: {
       id: user.id,
       username: user.username,
       plan: user.plan,
-      max_sites: user.max_sites,
+      plan_label: planConfig.label,
+      max_sites: planConfig.maxSites,
       site_count: siteCount,
       ai_edits_used: user.ai_edits_used || 0,
-      ai_edits_limit: AI_EDITS_PER_MONTH,
+      ai_edits_limit: planConfig.aiEditsPerMonth,
+      ai_enabled: AI_ALLOWED_PLANS.has(user.plan),
     },
   });
 }
@@ -387,9 +390,11 @@ function handleUserSites(req, res, config) {
     updated_at: s.updated_at,
   }));
 
+  const planConfig = PLANS[user.plan] || PLANS.free;
+
   return jsonOk(res, {
     sites,
-    quota: { used: sites.length, max: user.max_sites },
+    quota: { used: sites.length, max: planConfig.maxSites },
   });
 }
 
@@ -425,10 +430,11 @@ async function handleCreateSite(req, res, config) {
     return jsonErr(res, 'This slug is already taken', 'SLUG_TAKEN', 409);
   }
 
-  // Quota check
+  // Quota check (plan-based)
+  const planConfig = PLANS[user.plan] || PLANS.free;
   const count = db.countSitesByUser(user.id);
-  if (count >= user.max_sites) {
-    return jsonErr(res, `Site limit reached (${user.max_sites}). Delete a site first.`, 'QUOTA_EXCEEDED', 402);
+  if (count >= planConfig.maxSites) {
+    return jsonErr(res, `Site limit reached (${planConfig.maxSites}). Upgrade your plan or delete a site.`, 'QUOTA_EXCEEDED', 402);
   }
 
   const site = db.createSite({ slug, userId: user.id });
@@ -746,6 +752,8 @@ async function handleWebhookDeploy(req, res, slug, config) {
 // ── AI Quota helpers ──
 
 function checkAiQuota(user) {
+  const planConfig = PLANS[user.plan] || PLANS.free;
+  const limit = planConfig.aiEditsPerMonth;
   const now = new Date();
   const resetAt = user.ai_edits_reset_at ? new Date(user.ai_edits_reset_at) : null;
 
@@ -753,13 +761,13 @@ function checkAiQuota(user) {
   if (!resetAt || now >= resetAt) {
     const nextReset = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
     db.updateUser(user.id, { ai_edits_used: 0, ai_edits_reset_at: nextReset });
-    return { allowed: true, used: 0, limit: AI_EDITS_PER_MONTH };
+    return { allowed: true, used: 0, limit };
   }
 
   return {
-    allowed: (user.ai_edits_used || 0) < AI_EDITS_PER_MONTH,
+    allowed: (user.ai_edits_used || 0) < limit,
     used: user.ai_edits_used || 0,
-    limit: AI_EDITS_PER_MONTH,
+    limit,
   };
 }
 

@@ -10,6 +10,14 @@ const path = require('path');
 
 const DB_PATH = path.join(__dirname, '../../data/pipee-data.db');
 
+// ── Plan configuration ──────────────────────
+
+const PLANS = {
+  free:    { maxSites: 3,   aiEditsPerMonth: 0,   label: 'Free' },
+  pro:     { maxSites: 20,  aiEditsPerMonth: 200,  label: 'Pro' },
+  creator: { maxSites: 100, aiEditsPerMonth: 9999, label: 'Creator' },
+};
+
 // ── Lazy singleton ──────────────────────────
 
 let _db = null;
@@ -31,6 +39,7 @@ function getDb() {
   initSchema(_db);
   migrateGitFields(_db);
   migrateAiFields(_db);
+  promoteAdmin(_db);
 
   return _db;
 }
@@ -94,6 +103,18 @@ function migrateGitFields(db) {
   }
   if (!columns.includes('deploy_method')) {
     db.exec("ALTER TABLE sites ADD COLUMN deploy_method TEXT DEFAULT 'upload'");
+  }
+}
+
+// ── Admin auto-promotion ──────────────────────
+// First registered user (id=1) is always promoted to creator (admin)
+
+function promoteAdmin(db) {
+  const admin = db.prepare('SELECT id, plan FROM users WHERE id = 1').get();
+  if (admin && admin.plan !== 'creator') {
+    const creatorConfig = PLANS.creator;
+    db.prepare('UPDATE users SET plan = ?, max_sites = ? WHERE id = 1')
+      .run('creator', creatorConfig.maxSites);
   }
 }
 
@@ -203,6 +224,8 @@ function close() {
 }
 
 module.exports = {
+  PLANS,
+
   getUserById,
   getUserByUsername,
   getUserByToken,

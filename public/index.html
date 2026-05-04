@@ -399,6 +399,113 @@
       line-height: 1.6;
     }
 
+    /* ===== PRICING ===== */
+    .pricing-section {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 2rem 8rem;
+    }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      align-items: start;
+    }
+    .pricing-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2.5rem 2rem;
+      position: relative;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .pricing-card:hover {
+      border-color: var(--text-muted);
+    }
+    .pricing-card.featured {
+      border-color: var(--accent);
+      box-shadow: 0 0 40px rgba(124,58,237,0.12);
+      transform: scale(1.03);
+    }
+    .pricing-card.featured:hover {
+      border-color: var(--accent-bright);
+      transform: scale(1.05);
+    }
+    .pricing-badge {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--cta);
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 4px 14px;
+      border-radius: 100px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .pricing-name {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+    }
+    .creator-name {
+      background: linear-gradient(135deg, var(--amber), var(--pink));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .pricing-price {
+      font-size: 2.8rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.5rem;
+    }
+    .pricing-period {
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    .pricing-desc {
+      font-size: 0.9rem;
+      color: var(--text-dim);
+      margin-bottom: 1.75rem;
+    }
+    .pricing-features {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      margin-bottom: 2rem;
+      font-size: 0.9rem;
+    }
+    .pricing-features li {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .pricing-features .check {
+      color: var(--green);
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+    .pricing-features .check.highlight {
+      color: var(--accent-bright);
+    }
+    .pricing-features .x {
+      color: var(--text-muted);
+      font-size: 1rem;
+    }
+    .pricing-features li.disabled {
+      color: var(--text-muted);
+    }
+    .pricing-btn {
+      width: 100%;
+      justify-content: center;
+      text-align: center;
+    }
+
     /* ===== HOW IT WORKS ===== */
     .how-section {
       max-width: 800px;
@@ -646,6 +753,9 @@
     @media (max-width: 768px) {
       .stats { grid-template-columns: repeat(2, 1fr); }
       .features-grid { grid-template-columns: 1fr; }
+      .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin: 0 auto; }
+      .pricing-card.featured { transform: none; }
+      .pricing-card.featured:hover { transform: none; }
       .step { flex-direction: column; gap: 0.5rem; }
       .step-num { font-size: 2rem; }
     }
@@ -802,6 +912,54 @@
         </div>
         <h3 data-i18n="feature.multi.title">Multi-User</h3>
         <p data-i18n="feature.multi.desc">Multiple users can register and manage their own sites independently. Configurable site limits.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== PRICING ===== -->
+  <section class="pricing-section">
+    <div class="section-header">
+      <div class="section-label" data-i18n="pricing.label">Pricing</div>
+      <h2 class="section-title"><span data-i18n="pricing.title">Simple plans.</span><br><span data-i18n="pricing.titleLine2">Scale when you need to.</span></h2>
+    </div>
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <div class="pricing-name" data-i18n="pricing.free.name">Free</div>
+        <div class="pricing-price">$0<span class="pricing-period" data-i18n="pricing.period">/mo</span></div>
+        <div class="pricing-desc" data-i18n="pricing.free.desc">Get started with static site hosting.</div>
+        <ul class="pricing-features">
+          <li><span class="check">&#10003;</span> <span data-i18n="pricing.free.f1">3 sites</span></li>
+          <li><span class="check">&#10003;</span> <span data-i18n="pricing.free.f2">ZIP upload deploy</span></li>
+          <li><span class="check">&#10003;</span> <span data-i18n="pricing.free.f3">Subdomain routing</span></li>
+          <li><span class="check">&#10003;</span> <span data-i18n="pricing.free.f4">Git deploy</span></li>
+          <li class="disabled"><span class="x">&times;</span> <span data-i18n="pricing.free.f5">AI Editor</span></li>
+        </ul>
+        <a href="/console" class="btn btn-ghost pricing-btn" data-i18n="pricing.free.cta">Get Started</a>
+      </div>
+      <div class="pricing-card featured">
+        <div class="pricing-badge" data-i18n="pricing.popular">Popular</div>
+        <div class="pricing-name" data-i18n="pricing.pro.name">Pro</div>
+        <div class="pricing-price">$9<span class="pricing-period" data-i18n="pricing.period">/mo</span></div>
+        <div class="pricing-desc" data-i18n="pricing.pro.desc">For serious builders and creators.</div>
+        <ul class="pricing-features">
+          <li><span class="check">&#10003;</span> <span data-i18n="pricing.pro.f1">20 sites</span></li>
+          <li><span class="check">&#10003;</span> <span data-i18n="pricing.pro.f2">Everything in Free</span></li>
+          <li><span class="check highlight">&#10003;</span> <span data-i18n="pricing.pro.f3">AI Editor (200/mo)</span></li>
+          <li><span class="check">&#10003;</span> <span data-i18n="pricing.pro.f4">Priority support</span></li>
+        </ul>
+        <a href="/console" class="btn btn-primary pricing-btn" data-i18n="pricing.pro.cta">Upgrade to Pro</a>
+      </div>
+      <div class="pricing-card">
+        <div class="pricing-name creator-name" data-i18n="pricing.creator.name">Creator</div>
+        <div class="pricing-price">$29<span class="pricing-period" data-i18n="pricing.period">/mo</span></div>
+        <div class="pricing-desc" data-i18n="pricing.creator.desc">Unlimited power for agencies and teams.</div>
+        <ul class="pricing-features">
+          <li><span class="check">&#10003;</span> <span data-i18n="pricing.creator.f1">100 sites</span></li>
+          <li><span class="check">&#10003;</span> <span data-i18n="pricing.creator.f2">Everything in Pro</span></li>
+          <li><span class="check highlight">&#10003;</span> <span data-i18n="pricing.creator.f3">Unlimited AI edits</span></li>
+          <li><span class="check">&#10003;</span> <span data-i18n="pricing.creator.f4">Admin dashboard</span></li>
+        </ul>
+        <a href="/console" class="btn btn-ghost pricing-btn" data-i18n="pricing.creator.cta">Go Creator</a>
       </div>
     </div>
   </section>

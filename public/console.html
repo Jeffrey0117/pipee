@@ -44,7 +44,11 @@
     .nav-brand { font-size: 1.15rem; font-weight: 700; color: var(--text); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
     .nav-brand span { color: var(--accent); }
     .nav-right { display: flex; align-items: center; gap: 1rem; }
-    .nav-user { font-size: 0.85rem; color: var(--text-dim); }
+    .nav-user { font-size: 0.85rem; color: var(--text-dim); display: flex; align-items: center; gap: 0.5rem; }
+    .plan-badge { font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .plan-badge.free { background: rgba(148,148,172,0.15); color: var(--text-muted); }
+    .plan-badge.pro { background: rgba(124,58,237,0.15); color: var(--accent); border: 1px solid rgba(124,58,237,0.25); }
+    .plan-badge.creator { background: linear-gradient(135deg, rgba(251,191,36,0.2), rgba(244,114,182,0.2)); color: var(--amber); border: 1px solid rgba(251,191,36,0.3); }
     .btn-sm { padding: 0.45rem 1rem; border-radius: 8px; font-family: var(--font); font-size: 0.82rem; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
     .btn-sm-primary { background: var(--cta); color: #fff; }
     .btn-sm-primary:hover { background: var(--cta-hover); }
@@ -429,7 +433,10 @@
       $login.classList.add('hidden');
       $dashboard.classList.remove('hidden');
       $btnLogout.classList.remove('hidden');
-      $navUser.textContent = currentUser.username || 'User';
+      var planClass = currentUser.plan || 'free';
+      var planLabel = currentUser.plan_label || currentUser.plan || 'Free';
+      $navUser.innerHTML = escapeHtml(currentUser.username || 'User') +
+        ' <span class="plan-badge ' + escapeHtml(planClass) + '">' + escapeHtml(planLabel) + '</span>';
       // Set slug suffix from current host
       var suffix = document.getElementById('slug-suffix');
       var host = location.host;
@@ -476,9 +483,9 @@
         left.appendChild(dot); left.appendChild(link);
         var right = document.createElement('div'); right.className = 'site-card-right';
         // AI Editor button
-        if (currentUser && (currentUser.plan === 'pro' || currentUser.plan === 'creator')) {
+        if (currentUser && currentUser.ai_enabled) {
           var aiBtn = document.createElement('button'); aiBtn.className = 'btn-ai';
-          aiBtn.innerHTML = t('console.ai.btn') + ' <span class="pro-badge">PRO</span>';
+          aiBtn.innerHTML = t('console.ai.btn') + ' <span class="pro-badge">' + escapeHtml(currentUser.plan_label || 'PRO') + '</span>';
           aiBtn.addEventListener('click', function() { toggleAiPanel(s.slug, card); });
           right.appendChild(aiBtn);
         }
