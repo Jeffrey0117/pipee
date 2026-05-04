@@ -145,6 +145,30 @@
     .btn-copy:hover { color: var(--text); border-color: var(--accent); }
     .btn-copy.copied { color: var(--green); border-color: var(--green); }
 
+    /* Git Dashboard */
+    .git-dashboard { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+    .git-dash-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+    .git-dash-title { font-size: 0.85rem; font-weight: 700; color: var(--accent); }
+    .commit-list { max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; }
+    .commit-item { display: flex; align-items: flex-start; justify-content: space-between; padding: 0.6rem 0.75rem; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); gap: 0.75rem; }
+    .commit-info { flex: 1; min-width: 0; }
+    .commit-sha { font-family: var(--mono); font-size: 0.75rem; color: var(--accent); font-weight: 600; }
+    .commit-msg { font-size: 0.8rem; color: var(--text); margin-top: 0.15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .commit-meta { font-size: 0.68rem; color: var(--text-muted); margin-top: 0.15rem; }
+    .commit-actions { display: flex; gap: 0.35rem; flex-shrink: 0; align-items: center; }
+    .commit-actions .btn-git { font-size: 0.7rem; padding: 0.25rem 0.55rem; }
+    .btn-load-more { display: block; width: 100%; padding: 0.5rem; border-radius: 8px; font-size: 0.78rem; font-weight: 600; cursor: pointer; border: 1px dashed var(--border); background: transparent; color: var(--text-muted); font-family: var(--font); transition: all 0.2s; margin-top: 0.5rem; }
+    .btn-load-more:hover { color: var(--text); border-color: var(--text-muted); }
+    .diff-panel { margin-top: 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .diff-header { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+    .diff-title { font-size: 0.78rem; font-family: var(--mono); color: var(--accent); font-weight: 600; }
+    .diff-content { max-height: 400px; overflow: auto; padding: 0; margin: 0; font-family: var(--mono); font-size: 0.72rem; line-height: 1.6; }
+    .diff-line { padding: 0 0.75rem; white-space: pre-wrap; word-break: break-all; }
+    .diff-line.add { background: rgba(52,211,153,0.08); color: var(--green); }
+    .diff-line.del { background: rgba(248,113,113,0.08); color: var(--red); }
+    .diff-line.hdr { color: var(--blue); font-weight: 600; background: rgba(96,165,250,0.05); }
+    .diff-line.file { color: var(--text); font-weight: 700; background: rgba(148,148,172,0.08); padding-top: 0.5rem; border-top: 1px solid var(--border); }
+
     /* AI Editor */
     .btn-ai { padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: 1px solid rgba(124,58,237,0.3); background: rgba(124,58,237,0.08); color: var(--accent); font-family: var(--font); transition: all 0.2s; }
     .btn-ai:hover { background: rgba(124,58,237,0.18); border-color: var(--accent); color: var(--accent-bright); }
@@ -309,6 +333,17 @@
     'console.git.cloneHint': { en: 'Push to deploy:', zh: '推送即部署：' },
     'console.git.copied': { en: 'Copied!', zh: '已複製！' },
     'console.git.noRepo': { en: 'No git repo (upload only)', zh: '無 Git 倉庫（僅上傳）' },
+    'console.git.dashboard.btn': { en: 'Git History', zh: 'Git 歷史' },
+    'console.git.dashboard.title': { en: 'Git Dashboard', zh: 'Git 面板' },
+    'console.git.commits.empty': { en: 'No commits yet', zh: '尚無提交記錄' },
+    'console.git.rollback': { en: 'Rollback', zh: '回滾' },
+    'console.git.rollback.confirm': { en: 'Rollback to commit {sha}? This will redeploy the site.', zh: '回滾到提交 {sha}？將重新部署網站到此版本。' },
+    'console.git.rollback.success': { en: 'Rolled back to', zh: '已回滾到' },
+    'console.git.rollback.failed': { en: 'Rollback failed', zh: '回滾失敗' },
+    'console.git.diff': { en: 'Diff', zh: '差異' },
+    'console.git.diff.close': { en: 'Close', zh: '關閉' },
+    'console.git.loadMore': { en: 'Load more', zh: '載入更多' },
+    'console.git.loading': { en: 'Loading...', zh: '載入中...' },
     'time.justNow': { en: 'just now', zh: '剛剛' },
     'time.m': { en: 'm ago', zh: '分鐘前' },
     'time.h': { en: 'h ago', zh: '小時前' },
@@ -488,6 +523,13 @@
           aiBtn.innerHTML = t('console.ai.btn') + ' <span class="pro-badge">' + escapeHtml(currentUser.plan_label || 'PRO') + '</span>';
           aiBtn.addEventListener('click', function() { toggleAiPanel(s.slug, card); });
           right.appendChild(aiBtn);
+        }
+        // Git Dashboard button (Pro+ only)
+        if (currentUser && currentUser.git_dashboard_enabled && s.repo_url) {
+          var gitDashBtn = document.createElement('button'); gitDashBtn.className = 'btn-ai';
+          gitDashBtn.innerHTML = t('console.git.dashboard.btn') + ' <span class="pro-badge">' + escapeHtml(currentUser.plan_label || 'PRO') + '</span>';
+          gitDashBtn.addEventListener('click', function() { toggleGitDashboard(s.slug, card); });
+          right.appendChild(gitDashBtn);
         }
         var delBtn = document.createElement('button'); delBtn.className = 'btn-delete'; delBtn.textContent = t('console.delete');
         delBtn.addEventListener('click', function() { deleteSite(s.slug); });
@@ -904,6 +946,225 @@
       // Newlines
       html = html.replace(/\n/g, '<br>');
       return html;
+    }
+
+    // ── Git Dashboard ──
+    var gitDashOpenSlug = null;
+
+    function toggleGitDashboard(slug, card) {
+      var existing = card.querySelector('.git-dashboard');
+      if (existing) {
+        existing.remove();
+        if (gitDashOpenSlug === slug) { gitDashOpenSlug = null; return; }
+      }
+      gitDashOpenSlug = slug;
+
+      var panel = document.createElement('div');
+      panel.className = 'git-dashboard';
+      panel.innerHTML =
+        '<div class="git-dash-header">' +
+          '<span class="git-dash-title">' + escapeHtml(t('console.git.dashboard.title')) + '</span>' +
+          '<button class="btn-git" onclick="closeGitDashboard(this)">' + escapeHtml(t('console.git.diff.close')) + '</button>' +
+        '</div>' +
+        '<div class="commit-list" id="git-commits-' + slug + '">' +
+          '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.82rem">' + escapeHtml(t('console.git.loading')) + '</div>' +
+        '</div>' +
+        '<div id="git-diff-' + slug + '"></div>';
+      card.appendChild(panel);
+      loadCommits(slug, 1);
+    }
+
+    function closeGitDashboard(btn) {
+      var panel = btn.closest('.git-dashboard');
+      if (panel) panel.remove();
+      gitDashOpenSlug = null;
+    }
+
+    async function loadCommits(slug, page) {
+      var container = document.getElementById('git-commits-' + slug);
+      if (!container) return;
+
+      if (page === 1) {
+        container.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.82rem">' + escapeHtml(t('console.git.loading')) + '</div>';
+      }
+
+      try {
+        var resp = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/commits?page=' + page + '&limit=20', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        var data = await resp.json();
+
+        if (!resp.ok) {
+          container.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--red);font-size:0.82rem">' + escapeHtml(data.error || 'Error') + '</div>';
+          return;
+        }
+
+        if (page === 1) container.innerHTML = '';
+
+        if (data.commits.length === 0 && page === 1) {
+          container.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.82rem">' + escapeHtml(t('console.git.commits.empty')) + '</div>';
+          return;
+        }
+
+        for (var i = 0; i < data.commits.length; i++) {
+          var c = data.commits[i];
+          var item = document.createElement('div');
+          item.className = 'commit-item';
+
+          var info = document.createElement('div');
+          info.className = 'commit-info';
+          var shaSpan = document.createElement('span');
+          shaSpan.className = 'commit-sha';
+          shaSpan.textContent = c.sha.slice(0, 7);
+          var msgDiv = document.createElement('div');
+          msgDiv.className = 'commit-msg';
+          msgDiv.textContent = c.message.split('\n')[0];
+          msgDiv.title = c.message;
+          var metaDiv = document.createElement('div');
+          metaDiv.className = 'commit-meta';
+          metaDiv.textContent = c.author + ' \u00b7 ' + formatDate(c.date);
+          info.appendChild(shaSpan);
+          info.appendChild(msgDiv);
+          info.appendChild(metaDiv);
+
+          var actions = document.createElement('div');
+          actions.className = 'commit-actions';
+          var diffBtn = document.createElement('button');
+          diffBtn.className = 'btn-git';
+          diffBtn.textContent = t('console.git.diff');
+          diffBtn.dataset.sha = c.sha;
+          diffBtn.dataset.slug = slug;
+          diffBtn.addEventListener('click', function() { loadDiff(this.dataset.slug, this.dataset.sha); });
+          var rollBtn = document.createElement('button');
+          rollBtn.className = 'btn-git';
+          rollBtn.textContent = t('console.git.rollback');
+          rollBtn.dataset.sha = c.sha;
+          rollBtn.dataset.slug = slug;
+          rollBtn.addEventListener('click', function() { doRollback(this.dataset.slug, this.dataset.sha, this); });
+          actions.appendChild(diffBtn);
+          actions.appendChild(rollBtn);
+
+          item.appendChild(info);
+          item.appendChild(actions);
+          container.appendChild(item);
+        }
+
+        // Load more button
+        var oldMoreBtn = container.parentElement.querySelector('.btn-load-more');
+        if (oldMoreBtn) oldMoreBtn.remove();
+
+        if (data.commits.length === data.limit && (page * data.limit) < data.total) {
+          var loadMoreBtn = document.createElement('button');
+          loadMoreBtn.className = 'btn-load-more';
+          loadMoreBtn.textContent = t('console.git.loadMore');
+          loadMoreBtn.dataset.slug = slug;
+          loadMoreBtn.dataset.page = page + 1;
+          loadMoreBtn.addEventListener('click', function() {
+            var s = this.dataset.slug;
+            var p = parseInt(this.dataset.page, 10);
+            this.remove();
+            loadCommits(s, p);
+          });
+          container.after(loadMoreBtn);
+        }
+      } catch (err) {
+        if (page === 1) {
+          container.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--red);font-size:0.82rem">' + escapeHtml(err.message) + '</div>';
+        }
+      }
+    }
+
+    async function loadDiff(slug, sha) {
+      var diffContainer = document.getElementById('git-diff-' + slug);
+      if (!diffContainer) return;
+
+      if (diffContainer.dataset.sha === sha) {
+        diffContainer.innerHTML = '';
+        diffContainer.dataset.sha = '';
+        return;
+      }
+
+      diffContainer.dataset.sha = sha;
+      diffContainer.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.82rem">' + escapeHtml(t('console.git.loading')) + '</div>';
+
+      try {
+        var resp = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/commits/' + sha + '/diff', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        var data = await resp.json();
+
+        if (!resp.ok) {
+          diffContainer.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--red);font-size:0.82rem">' + escapeHtml(data.error || 'Error') + '</div>';
+          return;
+        }
+
+        var panel = document.createElement('div');
+        panel.className = 'diff-panel';
+        var header = document.createElement('div');
+        header.className = 'diff-header';
+        header.innerHTML = '<span class="diff-title">' + escapeHtml(sha.slice(0, 7)) + '</span><button class="btn-git" onclick="closeDiffPanel(this,\'' + slug + '\')">' + escapeHtml(t('console.git.diff.close')) + '</button>';
+        var content = document.createElement('div');
+        content.className = 'diff-content';
+        content.innerHTML = renderDiffText(data.diff);
+        panel.appendChild(header);
+        panel.appendChild(content);
+        diffContainer.innerHTML = '';
+        diffContainer.appendChild(panel);
+      } catch (err) {
+        diffContainer.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--red);font-size:0.82rem">' + escapeHtml(err.message) + '</div>';
+      }
+    }
+
+    function closeDiffPanel(btn, slug) {
+      var panel = btn.closest('.diff-panel');
+      if (panel) panel.remove();
+      var diffContainer = document.getElementById('git-diff-' + slug);
+      if (diffContainer) diffContainer.dataset.sha = '';
+    }
+
+    function renderDiffText(diffText) {
+      if (!diffText) return '<div class="diff-line" style="color:var(--text-muted)">No changes</div>';
+      var lines = diffText.split('\n');
+      var html = '';
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        var cls = '';
+        if (line.startsWith('diff --git')) cls = 'file';
+        else if (line.startsWith('@@')) cls = 'hdr';
+        else if (line.startsWith('+') && !line.startsWith('+++')) cls = 'add';
+        else if (line.startsWith('-') && !line.startsWith('---')) cls = 'del';
+        html += '<div class="diff-line ' + cls + '">' + escapeHtml(line) + '</div>';
+      }
+      return html;
+    }
+
+    async function doRollback(slug, sha, btn) {
+      if (!confirm(t('console.git.rollback.confirm').replace('{sha}', sha.slice(0, 7)))) return;
+      btn.disabled = true;
+      var origText = btn.textContent;
+      btn.textContent = t('console.git.loading');
+
+      try {
+        var resp = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/rollback', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sha: sha }),
+        });
+        var data = await resp.json();
+
+        if (!resp.ok) {
+          alert(data.error || t('console.git.rollback.failed'));
+          return;
+        }
+
+        alert(t('console.git.rollback.success') + ' ' + data.commit);
+        loadSites();
+      } catch (err) {
+        alert(t('console.git.rollback.failed') + ': ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = origText;
+      }
     }
 
     init();

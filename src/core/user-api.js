@@ -10,13 +10,14 @@ const path = require('path');
 const db = require('./db');
 const { hashPassword, verifyPassword, generateToken, verifyUserRequest } = require('./user-auth');
 const { validateSlug, STATIC_DIR } = require('./static');
-const { deployFromGit } = require('./git-deploy');
+const { deployFromGit, deployFromGitAtSha } = require('./git-deploy');
 const gitea = require('./gitea');
 const aiEditor = require('./ai-editor');
 const aiSessions = require('./ai-sessions');
 
 const { PLANS } = db;
 const AI_ALLOWED_PLANS = new Set(['pro', 'creator']);
+const GIT_DASHBOARD_PLANS = new Set(['pro', 'creator']);
 
 const MAX_ARCHIVE_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_EXTRACTED_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -238,6 +239,24 @@ async function handle(req, res, pathname, config) {
     return handleListFiles(req, res, filesMatch[1], config);
   }
 
+  // GET /api/user/sites/:slug/commits (Pro+ Git Dashboard)
+  const commitsMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/commits$/);
+  if (req.method === 'GET' && commitsMatch) {
+    return handleGetCommits(req, res, commitsMatch[1], config);
+  }
+
+  // GET /api/user/sites/:slug/commits/:sha/diff (Pro+ Git Dashboard)
+  const diffMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/commits\/([0-9a-f]{7,40})\/diff$/);
+  if (req.method === 'GET' && diffMatch) {
+    return handleGetCommitDiff(req, res, diffMatch[1], diffMatch[2], config);
+  }
+
+  // POST /api/user/sites/:slug/rollback (Pro+ Git Dashboard)
+  const rollbackMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/rollback$/);
+  if (req.method === 'POST' && rollbackMatch) {
+    return handleRollback(req, res, rollbackMatch[1], config);
+  }
+
   return jsonErr(res, 'Not found', 'NOT_FOUND', 404);
 }
 
@@ -365,6 +384,7 @@ function handleMe(req, res, config) {
       ai_edits_used: user.ai_edits_used || 0,
       ai_edits_limit: planConfig.aiEditsPerMonth,
       ai_enabled: AI_ALLOWED_PLANS.has(user.plan),
+      git_dashboard_enabled: GIT_DASHBOARD_PLANS.has(user.plan),
     },
   });
 }
@@ -893,6 +913,142 @@ function handleListFiles(req, res, slug, config) {
   const files = aiEditor.listSiteFiles(slug);
 
   return jsonOk(res, { files, total: files.length });
+}
+
+// ── GET /api/user/sites/:slug/commits (Pro+ Git Dashboard) ──
+
+async function handleGetCommits(req, res, slug, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  const { user } = result;
+
+  if (!GIT_DASHBOARD_PLANS.has(user.plan)) {
+    return jsonErr(res, 'Git Dashboard requires a Pro plan. Upgrade to unlock.', 'PLAN_REQUIRED', 403);
+  }
+
+  const site = db.getSite(slug);
+  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
+  if (site.user_id !== user.id) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
+
+  if (!site.repo_url) {
+    return jsonErr(res, 'No git repo linked', 'NO_REPO', 400);
+  }
+
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+  const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') || '20', 10)));
+
+  try {
+    const { commits, total } = await gitea.getRepoCommits(slug, { page, limit });
+
+    return jsonOk(res, {
+      commits: commits.map(c => ({
+        sha: c.sha,
+        message: (c.commit && c.commit.message) || '',
+        author: (c.commit && c.commit.author && c.commit.author.name) || '',
+        date: (c.commit && c.commit.author && c.commit.author.date) || '',
+      })),
+      total,
+      page,
+      limit,
+    });
+  } catch (err) {
+    console.error(`[pipee] Failed to get commits for ${slug}:`, err.message);
+    return jsonErr(res, 'Failed to fetch commits', 'GIT_ERROR', 502);
+  }
+}
+
+// ── GET /api/user/sites/:slug/commits/:sha/diff (Pro+ Git Dashboard) ──
+
+async function handleGetCommitDiff(req, res, slug, sha, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  const { user } = result;
+
+  if (!GIT_DASHBOARD_PLANS.has(user.plan)) {
+    return jsonErr(res, 'Git Dashboard requires a Pro plan.', 'PLAN_REQUIRED', 403);
+  }
+
+  const site = db.getSite(slug);
+  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
+  if (site.user_id !== user.id) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
+
+  if (!site.repo_url) {
+    return jsonErr(res, 'No git repo linked', 'NO_REPO', 400);
+  }
+
+  try {
+    const diff = await gitea.getCommitDiff(slug, sha);
+    return jsonOk(res, { sha, diff });
+  } catch (err) {
+    console.error(`[pipee] Failed to get diff for ${slug}@${sha}:`, err.message);
+    return jsonErr(res, 'Failed to fetch diff', 'GIT_ERROR', 502);
+  }
+}
+
+// ── POST /api/user/sites/:slug/rollback (Pro+ Git Dashboard) ──
+
+async function handleRollback(req, res, slug, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  const { user } = result;
+
+  if (!GIT_DASHBOARD_PLANS.has(user.plan)) {
+    return jsonErr(res, 'Git Dashboard requires a Pro plan.', 'PLAN_REQUIRED', 403);
+  }
+
+  const site = db.getSite(slug);
+  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
+  if (site.user_id !== user.id) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
+
+  if (!site.repo_url) {
+    return jsonErr(res, 'No git repo linked', 'NO_REPO', 400);
+  }
+
+  let body;
+  try {
+    body = await collectBody(req, 4096);
+  } catch {
+    return jsonErr(res, 'Failed to read body', 'BAD_REQUEST', 400);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(body.toString('utf8'));
+  } catch {
+    return jsonErr(res, 'Invalid JSON', 'BAD_REQUEST', 400);
+  }
+
+  const sha = (data.sha || '').trim();
+  if (!/^[0-9a-f]{7,40}$/i.test(sha)) {
+    return jsonErr(res, 'Invalid commit SHA', 'BAD_REQUEST', 400);
+  }
+
+  try {
+    const { commit, size } = deployFromGitAtSha(slug, site.repo_url, sha);
+    db.updateSite(slug, { last_commit: commit, size });
+
+    const siteUrl = getSiteUrl(req, slug, config);
+
+    return jsonOk(res, {
+      url: siteUrl,
+      slug,
+      commit: commit.slice(0, 7),
+      size,
+    });
+  } catch (err) {
+    if (err.message === 'INVALID_SHA') {
+      return jsonErr(res, 'Invalid commit SHA', 'BAD_REQUEST', 400);
+    }
+    if (err.message === 'NO_INDEX_HTML') {
+      return jsonErr(res, 'That commit has no index.html at root', 'NO_INDEX_HTML', 400);
+    }
+    console.error(`[pipee] Rollback failed for ${slug}@${sha}:`, err.message);
+    return jsonErr(res, 'Rollback failed', 'ROLLBACK_FAILED', 500);
+  }
 }
 
 module.exports = { handle };

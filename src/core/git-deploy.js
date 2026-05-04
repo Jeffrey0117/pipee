@@ -104,4 +104,67 @@ function getDirSize(dir) {
   return size;
 }
 
-module.exports = { deployFromGit };
+function deployFromGitAtSha(slug, repoUrl, sha) {
+  if (!/^[0-9a-f]{7,40}$/i.test(sha)) {
+    throw new Error('INVALID_SHA');
+  }
+
+  ensureGitCache();
+  const cacheDir = path.join(GIT_CACHE_DIR, slug);
+
+  if (!fs.existsSync(path.join(cacheDir, '.git'))) {
+    execSync(`git clone "${repoUrl}" "${cacheDir}"`, {
+      stdio: 'pipe', windowsHide: true, timeout: 60000,
+    });
+  }
+
+  // Unshallow if needed (shallow clones can't checkout arbitrary SHAs)
+  try {
+    execSync(`git -C "${cacheDir}" fetch --unshallow origin`, {
+      stdio: 'pipe', windowsHide: true, timeout: 60000,
+    });
+  } catch {
+    execSync(`git -C "${cacheDir}" fetch origin`, {
+      stdio: 'pipe', windowsHide: true, timeout: 30000,
+    });
+  }
+
+  execSync(`git -C "${cacheDir}" checkout ${sha}`, {
+    stdio: 'pipe', windowsHide: true, timeout: 10000,
+  });
+
+  const commit = execSync(`git -C "${cacheDir}" rev-parse HEAD`, {
+    encoding: 'utf-8', windowsHide: true,
+  }).trim();
+
+  if (!fs.existsSync(path.join(cacheDir, 'index.html'))) {
+    throw new Error('NO_INDEX_HTML');
+  }
+
+  const siteDir = path.join(STATIC_DIR, slug);
+  const tempDir = path.join(STATIC_DIR, `.tmp-git-${slug}-${Date.now()}`);
+  copyDirExcludeGit(cacheDir, tempDir);
+
+  const oldDir = path.join(STATIC_DIR, `.old-${slug}-${Date.now()}`);
+  if (fs.existsSync(siteDir)) {
+    fs.renameSync(siteDir, oldDir);
+  }
+  try {
+    fs.renameSync(tempDir, siteDir);
+  } catch (err) {
+    if (fs.existsSync(oldDir)) {
+      try { fs.renameSync(oldDir, siteDir); } catch { /* best effort */ }
+    }
+    throw err;
+  }
+  if (fs.existsSync(oldDir)) {
+    setTimeout(() => {
+      try { fs.rmSync(oldDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }, 1000);
+  }
+
+  const size = getDirSize(siteDir);
+  return { commit, size };
+}
+
+module.exports = { deployFromGit, deployFromGitAtSha };

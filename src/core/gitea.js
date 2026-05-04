@@ -140,6 +140,53 @@ async function deleteSiteRepo(slug) {
   }
 }
 
+/**
+ * Get commit history for a site repo.
+ * Returns { commits, total }.
+ */
+async function getRepoCommits(slug, { page = 1, limit = 20 } = {}) {
+  if (!isEnabled()) return { commits: [], total: 0 };
+
+  const cfg = getGiteaConfig();
+  const owner = getOwner();
+  const url = `${cfg.url}/api/v1/repos/${owner}/${slug}/commits?page=${page}&limit=${limit}`;
+
+  const res = await fetch(url, {
+    headers: {
+      'Authorization': `token ${cfg.token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Gitea commits: ${res.status} ${text}`);
+  }
+
+  const total = parseInt(res.headers.get('x-total') || '0', 10);
+  const commits = await res.json();
+
+  return { commits, total };
+}
+
+/**
+ * Get raw diff for a specific commit.
+ */
+async function getCommitDiff(slug, sha) {
+  if (!isEnabled()) return '';
+
+  const cfg = getGiteaConfig();
+  const owner = getOwner();
+  const url = `${cfg.url}/${owner}/${slug}/commit/${sha}.diff`;
+
+  const res = await fetch(url, {
+    headers: { 'Authorization': `token ${cfg.token}` },
+  });
+
+  if (!res.ok) return '';
+  return res.text();
+}
+
 module.exports = {
   isEnabled,
   getCloneUrl,
@@ -147,4 +194,6 @@ module.exports = {
   getOwner,
   createSiteRepo,
   deleteSiteRepo,
+  getRepoCommits,
+  getCommitDiff,
 };
