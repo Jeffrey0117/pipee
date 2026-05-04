@@ -379,6 +379,7 @@ function handleUserSites(req, res, config) {
     size: s.size,
     config: JSON.parse(s.config || '{}'),
     repo_url: s.repo_url || null,
+    git_url: s.repo_url ? `${config.externalUrl}/git/${s.slug}.git` : null,
     branch: s.branch || null,
     last_commit: s.last_commit || null,
     deploy_method: s.deploy_method || 'upload',
@@ -461,10 +462,7 @@ async function handleCreateSite(req, res, config) {
   return jsonOk(res, {
     slug: site.slug,
     url: getSiteUrl(req, slug, config),
-    repo: repoInfo ? {
-      clone_url: repoInfo.clone_url,
-      web_url: repoInfo.web_url,
-    } : null,
+    git_url: repoInfo ? `${config.externalUrl}/git/${slug}.git` : null,
   }, 201);
 }
 

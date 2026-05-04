@@ -493,7 +493,8 @@
         // Git section
         var gitSection = document.createElement('div');
         gitSection.className = 'site-git';
-        if (s.repo_url) {
+        var displayGitUrl = s.git_url || s.repo_url;
+        if (displayGitUrl) {
           // Clone URL bar (prominent)
           var cloneWrap = document.createElement('div');
           cloneWrap.className = 'clone-url-wrap';
@@ -502,12 +503,12 @@
           cloneLabel.textContent = t('console.git.cloneHint');
           var cloneText = document.createElement('span');
           cloneText.className = 'clone-url-text';
-          cloneText.textContent = s.repo_url;
-          cloneText.title = s.repo_url;
+          cloneText.textContent = displayGitUrl;
+          cloneText.title = displayGitUrl;
           var copyBtn = document.createElement('button');
           copyBtn.className = 'btn-copy';
           copyBtn.textContent = 'Copy';
-          var repoUrlForCopy = s.repo_url;
+          var repoUrlForCopy = displayGitUrl;
           copyBtn.addEventListener('click', function() { copyCloneUrl(repoUrlForCopy, copyBtn); });
           cloneText.addEventListener('click', function() { copyCloneUrl(repoUrlForCopy, copyBtn); });
           cloneWrap.appendChild(cloneLabel);
@@ -718,8 +719,8 @@
         if (resp.ok) {
           var safeUrl = escapeHtml(data.url);
           var msg = t('console.deploy.success') + ' <a href="' + safeUrl + '" target="_blank" style="color:var(--green);font-weight:600">' + safeUrl + '</a>';
-          if (createData && createData.repo && createData.repo.clone_url) {
-            msg += '<br><span style="font-size:0.85rem;color:var(--text-dim)">' + escapeHtml(t('console.git.cloneHint')) + '</span> <code style="font-family:var(--mono);color:var(--accent);font-size:0.82rem">git clone ' + escapeHtml(createData.repo.clone_url) + '</code>';
+          if (createData && createData.git_url) {
+            msg += '<br><span style="font-size:0.85rem;color:var(--text-dim)">' + escapeHtml(t('console.git.cloneHint')) + '</span> <code style="font-family:var(--mono);color:var(--accent);font-size:0.82rem">git clone ' + escapeHtml(createData.git_url) + '</code>';
           }
           showStatus('success', msg);
           selectedFile = null;

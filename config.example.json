@@ -8,6 +8,7 @@
   "gitea": {
     "url": "",
     "token": "",
-    "owner": "pipee"
+    "owner": "pipee",
+    "webhookHost": ""
   }
 }

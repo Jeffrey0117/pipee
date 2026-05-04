@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { handleSite, MIME } = require('./static');
 const userApi = require('./user-api');
+const gitProxy = require('./git-proxy');
 
 const ROOT = path.join(__dirname, '../..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -94,6 +95,11 @@ async function handleRequest(req, res) {
       req.url = sitePath;
       return handleSite(req, res, slug);
     }
+  }
+
+  // ── Git proxy ──
+  if (pathname.startsWith('/git/')) {
+    return gitProxy.handle(req, res);
   }
 
   // ── API routes ──

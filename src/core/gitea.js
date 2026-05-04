@@ -103,7 +103,10 @@ async function createSiteRepo(slug, pipeeBaseUrl) {
   const webhookSecret = crypto.randomBytes(32).toString('hex');
 
   // Register webhook for auto-deploy on push
-  const webhookUrl = `${pipeeBaseUrl}/api/webhook/${slug}`;
+  // Use webhookHost if set (e.g. Docker needs host.docker.internal)
+  const cfg = getGiteaConfig();
+  const webhookBase = cfg.webhookHost || pipeeBaseUrl;
+  const webhookUrl = `${webhookBase}/api/webhook/${slug}`;
   await giteaFetch(`/repos/${owner}/${slug}/hooks`, {
     method: 'POST',
     body: {
