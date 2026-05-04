@@ -776,12 +776,6 @@ async function handleAiChat(req, res, slug, config) {
     return jsonErr(res, 'AI Editor requires a Pro plan. Upgrade to unlock.', 'PLAN_REQUIRED', 403);
   }
 
-  // API key check
-  const apiKey = config.anthropicApiKey;
-  if (!apiKey) {
-    return jsonErr(res, 'AI Editor is not configured on this server', 'NOT_CONFIGURED', 503);
-  }
-
   // Ownership check
   const site = db.getSite(slug);
   if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
@@ -817,14 +811,16 @@ async function handleAiChat(req, res, slug, config) {
     return jsonErr(res, 'Message too long (max 4000 characters)', 'BAD_REQUEST', 400);
   }
 
-  // Get existing conversation
-  const history = aiSessions.getSession(user.id, slug) || [];
+  // Get existing session ID
+  const sessionId = aiSessions.getSessionId(user.id, slug);
 
   try {
-    const aiResult = await aiEditor.chat(slug, message, history, apiKey);
+    const aiResult = await aiEditor.chat(slug, message, sessionId);
 
-    // Save updated conversation
-    aiSessions.setSession(user.id, slug, aiResult.conversationHistory);
+    // Save session ID for conversation continuity
+    if (aiResult.sessionId) {
+      aiSessions.setSessionId(user.id, slug, aiResult.sessionId);
+    }
 
     // Increment quota if files were changed (re-read user for atomic update)
     if (aiResult.filesChanged.length > 0) {

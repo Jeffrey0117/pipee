@@ -44,7 +44,6 @@ function loadConfig() {
     jwtSecret: config.jwtSecret || 'change-this-to-a-random-string',
     maxSites: config.maxSites || 10,
     maxSiteSize: config.maxSiteSize || 52428800,
-    anthropicApiKey: config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '',
     gitea: config.gitea || {},
   };
 }

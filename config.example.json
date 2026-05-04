@@ -4,7 +4,6 @@
   "jwtSecret": "change-this-to-a-random-string",
   "maxSites": 10,
   "maxSiteSize": 52428800,
-  "anthropicApiKey": "",
   "gitea": {
     "url": "",
     "token": "",

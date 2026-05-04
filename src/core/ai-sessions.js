@@ -1,21 +1,21 @@
 /**
  * AI Session Store
  *
- * Manages conversation history per user+slug combination.
+ * Stores Claude CLI session IDs per user+slug combination.
  * Sessions auto-expire after 4 hours of inactivity.
  */
 
 const SESSION_TTL = 4 * 60 * 60 * 1000; // 4 hours
 const MAX_SESSIONS = 200; // Prevent unbounded memory growth
 
-// Map<"userId:slug", { messages, lastUsed }>
+// Map<"userId:slug", { sessionId, lastUsed }>
 const sessions = new Map();
 
 function getSessionKey(userId, slug) {
   return `${userId}:${slug}`;
 }
 
-function getSession(userId, slug) {
+function getSessionId(userId, slug) {
   const key = getSessionKey(userId, slug);
   const entry = sessions.get(key);
   if (!entry) return null;
@@ -26,12 +26,12 @@ function getSession(userId, slug) {
   }
 
   entry.lastUsed = Date.now();
-  return entry.messages;
+  return entry.sessionId;
 }
 
-function setSession(userId, slug, messages) {
+function setSessionId(userId, slug, sessionId) {
   const key = getSessionKey(userId, slug);
-  sessions.set(key, { messages, lastUsed: Date.now() });
+  sessions.set(key, { sessionId, lastUsed: Date.now() });
 
   // Evict oldest sessions if over limit
   if (sessions.size > MAX_SESSIONS) {
@@ -62,4 +62,4 @@ setInterval(() => {
   }
 }, 30 * 60 * 1000).unref();
 
-module.exports = { getSession, setSession, clearSession };
+module.exports = { getSessionId, setSessionId, clearSession };
