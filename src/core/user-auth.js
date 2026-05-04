@@ -1,70 +1,85 @@
 /**
- * LetMeUse User Authentication
+ * Pipee Local Authentication
  *
- * Decodes LetMeUse JWT tokens and resolves/creates users.
- * Tokens are trusted internally (issued by LetMeUse SDK on client side).
+ * Simple username/password auth with crypto.scrypt + JWT.
+ * No external auth services needed.
  */
 
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const db = require('./db');
 
 /**
- * Decode a LetMeUse JWT without signature verification.
- * We trust these tokens because they come from the LetMeUse SDK.
- * @param {string} token - JWT string
- * @returns {{ sub: string, email?: string, name?: string } | null}
+ * Hash a password with a random salt using scrypt.
+ * @param {string} password
+ * @returns {{ hash: string, salt: string }}
  */
-function decodeLetmeuseToken(token) {
-  if (!token || typeof token !== 'string') return null;
-  const parts = token.split('.');
-  if (parts.length !== 3) return null;
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return { hash, salt };
+}
+
+/**
+ * Verify a password against a stored hash and salt.
+ * @param {string} password
+ * @param {string} hash
+ * @param {string} salt
+ * @returns {boolean}
+ */
+function verifyPassword(password, hash, salt) {
+  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
+  return crypto.timingSafeEqual(Buffer.from(derived, 'hex'), Buffer.from(hash, 'hex'));
+}
+
+/**
+ * Generate a JWT token for a user.
+ * @param {number} userId
+ * @param {string} jwtSecret
+ * @returns {string}
+ */
+function generateToken(userId, jwtSecret) {
+  return jwt.sign({ userId }, jwtSecret, { expiresIn: '30d' });
+}
+
+/**
+ * Verify a JWT token and return the decoded payload.
+ * @param {string} token
+ * @param {string} jwtSecret
+ * @returns {{ userId: number } | null}
+ */
+function verifyToken(token, jwtSecret) {
   try {
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
-    if (!payload.sub) return null;
-    return payload;
+    return jwt.verify(token, jwtSecret);
   } catch {
     return null;
   }
 }
 
 /**
- * Find user by LetMeUse sub, or create one. Handles race conditions where
- * two concurrent requests try to create the same user.
- * @param {{ sub: string, email?: string, name?: string }} payload
- * @returns {object} user record
- */
-function resolveOrCreateUser(payload) {
-  let user = db.getUserByLetmeuseSub(payload.sub);
-  if (user) return user;
-
-  try {
-    return db.createUser({
-      letmeuse_sub: payload.sub,
-      email: payload.email || null,
-      name: payload.name || null,
-    });
-  } catch (err) {
-    // UNIQUE constraint violation — another request created it first
-    user = db.getUserByLetmeuseSub(payload.sub);
-    if (user) return user;
-    throw err;
-  }
-}
-
-/**
- * Extract LetMeUse token from request, decode it, and resolve or create the user.
+ * Extract Bearer token from request, verify JWT, and return the user.
  * @param {import('http').IncomingMessage} req
- * @returns {{ user: object, token: string } | null}
+ * @param {{ jwtSecret: string }} config
+ * @returns {{ user: object } | null}
  */
-function verifyUserRequest(req) {
+function verifyUserRequest(req, config) {
   const authHeader = req.headers['authorization'] || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return null;
 
-  const payload = decodeLetmeuseToken(token);
-  if (!payload) return null;
+  const payload = verifyToken(token, config.jwtSecret);
+  if (!payload || !payload.userId) return null;
 
-  const user = resolveOrCreateUser(payload);
-  return { user, token };
+  const user = db.getUserById(payload.userId);
+  if (!user) return null;
+
+  return { user };
 }
 
-module.exports = { decodeLetmeuseToken, resolveOrCreateUser, verifyUserRequest };
+module.exports = {
+  hashPassword,
+  verifyPassword,
+  generateToken,
+  verifyToken,
+  verifyUserRequest,
+};

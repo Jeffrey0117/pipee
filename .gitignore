@@ -6,29 +6,15 @@ package-lock.json
 *.log
 logs/
 
-# Tunnels
-tunnels/*.yml
-cloudflared.yml
-
 # Environment
 .env
-services/.env
 
 # Configuration (user-specific)
 config.json
-config.local.json
 
-# Data (user-specific)
+# Data (runtime)
 data/*
 !data/.gitkeep
-
-# Services (keep only examples)
-services/*
-!services/_example.js
-!services/.gitkeep
-
-# Projects (user-deployed apps)
-projects/
 
 # Temp files
 *.tmp

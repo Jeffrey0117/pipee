@@ -1,31 +1,13 @@
 {
   "name": "pipee",
-  "version": "1.0.0",
-  "description": "Zero-config self-hosted deployment tool for full-stack apps",
+  "version": "2.0.0",
+  "description": "Simple self-hosted static site hosting",
   "main": "index.js",
-  "bin": {
-    "pipee": "./bin/pipee.js"
-  },
   "type": "commonjs",
-  "files": [
-    "bin/",
-    "src/",
-    "mcp/*.js",
-    "mcp/package.json",
-    "sdk/",
-    "index.js",
-    "config.example.json"
-  ],
-  "keywords": [
-    "deploy",
-    "self-hosted",
-    "zero-config",
-    "pm2",
-    "deployment",
-    "devops",
-    "hosting",
-    "mcp"
-  ],
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/Jeffrey0117/pipee"
@@ -33,29 +15,17 @@
   "homepage": "https://github.com/Jeffrey0117/pipee",
   "license": "MIT",
   "author": "Jeffrey0117",
-  "scripts": {
-    "start": "node index.js",
-    "setup": "node bin/pipee.js setup"
-  },
+  "keywords": [
+    "static-site",
+    "hosting",
+    "self-hosted",
+    "deploy",
+    "zip-upload"
+  ],
   "dependencies": {
-    "adm-zip": "^0.5.17",
     "better-sqlite3": "^12.6.2",
-    "chalk": "^5.6.2",
-    "chokidar": "^5.0.0",
-    "cli-table3": "^0.6.5",
-    "commander": "^14.0.2",
-    "inquirer": "^13.2.2",
-    "ioredis": "^5.9.3",
-    "jsonwebtoken": "^9.0.3",
-    "node-cron": "^4.2.1",
-    "ora": "^9.1.0",
-    "pm2": "^6.0.14",
-    "tar": "^7.5.11",
-    "yaml": "^2.8.2"
-  },
-  "devDependencies": {
-    "@commitlint/cli": "^20.3.1",
-    "@commitlint/config-conventional": "^20.3.1"
+    "adm-zip": "^0.5.17",
+    "jsonwebtoken": "^9.0.3"
   },
   "engines": {
     "node": ">=18.0.0"

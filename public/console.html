@@ -6,11 +6,7 @@
   <title data-i18n="console.meta.title">Pipee Console</title>
   <link rel="icon" type="image/x-icon" href="/newfav.ico">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-  <meta name="description" content="Deploy static sites for free on Pipee. Drag & drop your files and go live instantly.">
-  <meta property="og:title" content="派比 Pipee — 控制台">
-  <meta property="og:description" content="免費部署靜態網站。拖放檔案，即時上線。">
-  <meta property="og:url" content="https://pipee.tw/console">
-  <meta property="og:type" content="website">
+  <meta name="description" content="Deploy and manage your static sites on Pipee.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -20,7 +16,6 @@
       --bg-card: #15151e;
       --bg-card-hover: #1c1c28;
       --border: #252538;
-      --border-glow: #7c3aed;
       --text: #e4e4ed;
       --text-dim: #9494ac;
       --text-muted: #6a6a82;
@@ -30,710 +25,111 @@
       --cta-hover: #6d28d9;
       --green: #34d399;
       --blue: #60a5fa;
-      --amber: #fbbf24;
       --red: #f87171;
       --bg-nav: rgba(13,13,20,0.9);
-      --bg-code: #0f0f18;
       --font: 'DM Sans', -apple-system, sans-serif;
       --mono: 'JetBrains Mono', monospace;
     }
-
     html.light {
-      --bg: #f5f5fa;
-      --bg-card: #ffffff;
-      --bg-card-hover: #ededf4;
-      --border: #dddde8;
-      --border-glow: #7c3aed;
-      --text: #1a1a2e;
-      --text-dim: #5a5a72;
-      --text-muted: #9090a8;
-      --accent: #7c3aed;
-      --accent-bright: #6d28d9;
-      --cta: #7c3aed;
-      --cta-hover: #6d28d9;
-      --green: #059669;
-      --blue: #2563eb;
-      --amber: #d97706;
-      --red: #ef4444;
-      --bg-nav: rgba(245,245,250,0.92);
-      --bg-code: #eeeef4;
+      --bg: #f5f5fa; --bg-card: #ffffff; --bg-card-hover: #ededf4;
+      --border: #dddde8; --text: #1a1a2e; --text-dim: #5a5a72;
+      --text-muted: #9090a8; --accent: #7c3aed; --accent-bright: #6d28d9;
+      --cta: #7c3aed; --cta-hover: #6d28d9; --green: #059669;
+      --blue: #2563eb; --red: #ef4444; --bg-nav: rgba(245,245,250,0.92);
     }
-
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: var(--font);
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      -webkit-font-smoothing: antialiased;
-    }
+    body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; -webkit-font-smoothing: antialiased; }
 
-    /* ===== NAVBAR ===== */
-    .navbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 1rem 2rem;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg-nav);
-      backdrop-filter: blur(12px);
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-    .nav-brand {
-      font-size: 1.15rem;
-      font-weight: 700;
-      color: var(--text);
-      text-decoration: none;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
+    .navbar { display: flex; align-items: center; justify-content: space-between; padding: 1rem 2rem; border-bottom: 1px solid var(--border); background: var(--bg-nav); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 100; }
+    .nav-brand { font-size: 1.15rem; font-weight: 700; color: var(--text); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
     .nav-brand span { color: var(--accent); }
-    .nav-right {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-    .nav-user {
-      font-size: 0.85rem;
-      color: var(--text-dim);
-    }
-    .btn-sm {
-      padding: 0.45rem 1rem;
-      border-radius: 8px;
-      font-family: var(--font);
-      font-size: 0.82rem;
-      font-weight: 600;
-      cursor: pointer;
-      border: none;
-      transition: all 0.2s;
-    }
-    .btn-sm-primary {
-      background: var(--cta);
-      color: #fff;
-    }
+    .nav-right { display: flex; align-items: center; gap: 1rem; }
+    .nav-user { font-size: 0.85rem; color: var(--text-dim); }
+    .btn-sm { padding: 0.45rem 1rem; border-radius: 8px; font-family: var(--font); font-size: 0.82rem; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
+    .btn-sm-primary { background: var(--cta); color: #fff; }
     .btn-sm-primary:hover { background: var(--cta-hover); }
-    .btn-sm-ghost {
-      background: transparent;
-      color: var(--text-dim);
-      border: 1px solid var(--border);
-    }
-    .btn-sm-ghost:hover {
-      color: var(--text);
-      border-color: var(--text-muted);
-    }
+    .btn-sm-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+    .btn-sm-ghost:hover { color: var(--text); border-color: var(--text-muted); }
 
-    /* ===== MAIN ===== */
-    .main {
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 2.5rem 2rem 4rem;
-    }
+    .main { max-width: 800px; margin: 0 auto; padding: 2.5rem 2rem 4rem; }
 
-    /* ===== LOGIN STATE ===== */
-    .login-prompt {
-      text-align: center;
-      padding: 6rem 2rem;
-    }
-    .login-prompt h2 {
-      font-size: 1.8rem;
-      font-weight: 700;
-      margin-bottom: 0.75rem;
-    }
-    .login-prompt p {
-      color: var(--text-dim);
-      margin-bottom: 2rem;
-      font-size: 1rem;
-    }
+    /* Login */
+    .login-prompt { text-align: center; padding: 6rem 2rem; }
+    .login-prompt h2 { font-size: 1.8rem; font-weight: 700; margin-bottom: 0.75rem; }
+    .login-prompt p { color: var(--text-dim); margin-bottom: 2rem; font-size: 1rem; }
+    .auth-form { max-width: 360px; margin: 0 auto; }
+    .auth-form input { width: 100%; padding: 0.7rem 1rem; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: var(--font); font-size: 0.9rem; outline: none; margin-bottom: 0.75rem; }
+    .auth-form input:focus { border-color: var(--accent); }
+    .auth-form .btn-auth { width: 100%; padding: 0.75rem; border-radius: 10px; font-family: var(--font); font-size: 0.95rem; font-weight: 700; cursor: pointer; border: none; background: var(--cta); color: #fff; transition: all 0.2s; margin-bottom: 0.75rem; }
+    .auth-form .btn-auth:hover { background: var(--cta-hover); }
+    .auth-toggle { font-size: 0.85rem; color: var(--text-dim); }
+    .auth-toggle a { color: var(--accent); cursor: pointer; text-decoration: none; }
+    .auth-toggle a:hover { text-decoration: underline; }
+    .auth-error { color: var(--red); font-size: 0.85rem; margin-bottom: 0.75rem; }
 
-    /* ===== SECTION HEADERS ===== */
-    .section-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 1.5rem;
-    }
-    .section-head h2 {
-      font-size: 1.25rem;
-      font-weight: 700;
-    }
-    .section-head .quota {
-      font-size: 0.85rem;
-      color: var(--text-dim);
-      background: rgba(124,58,237,0.1);
-      padding: 0.3rem 0.8rem;
-      border-radius: 100px;
-      border: 1px solid rgba(124,58,237,0.15);
-    }
+    /* Dashboard */
+    .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+    .section-head h2 { font-size: 1.25rem; font-weight: 700; }
+    .section-head .quota { font-size: 0.85rem; color: var(--text-dim); background: rgba(124,58,237,0.1); padding: 0.3rem 0.8rem; border-radius: 100px; border: 1px solid rgba(124,58,237,0.15); }
 
-    /* ===== OVERVIEW BAR ===== */
-    .overview-bar {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1px;
-      background: var(--border);
-      border-radius: 12px;
-      overflow: hidden;
-      margin-bottom: 1.5rem;
-    }
-    .overview-stat {
-      background: var(--bg-card);
-      padding: 1.25rem 1rem;
-      text-align: center;
-    }
-    .overview-value {
-      font-size: 1.6rem;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      line-height: 1;
-      margin-bottom: 0.3rem;
-    }
-    .overview-value.green { color: var(--green); }
-    .overview-value.blue { color: var(--blue); }
-    .overview-value.purple { color: var(--accent-bright); }
-    .overview-label {
-      font-size: 0.7rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    /* ===== SITE CARDS ===== */
-    .site-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      margin-bottom: 2.5rem;
-    }
-    .site-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem 1.5rem;
-      transition: border-color 0.2s;
-    }
+    .site-list { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2.5rem; }
+    .site-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem 1.5rem; transition: border-color 0.2s; }
     .site-card:hover { border-color: var(--text-muted); }
-    .site-card-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 0.75rem;
-    }
+    .site-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
     .site-card-left { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
-    .status-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--green);
-      flex-shrink: 0;
-      box-shadow: 0 0 6px rgba(52,211,153,0.5);
-      animation: pulse-dot 2s ease-in-out infinite;
-    }
-    @keyframes pulse-dot {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-    .site-url {
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--text);
-      text-decoration: none;
-      word-break: break-all;
-    }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; box-shadow: 0 0 6px rgba(52,211,153,0.5); animation: pulse-dot 2s ease-in-out infinite; }
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .site-url { font-size: 0.95rem; font-weight: 700; color: var(--text); text-decoration: none; word-break: break-all; }
     .site-url:hover { color: var(--accent); }
     .site-card-right { display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0; }
-    .site-hits {
-      font-size: 0.82rem;
-      font-weight: 600;
-      color: var(--text-dim);
-    }
-    .site-hits strong { color: var(--text); }
-    .btn-delete {
-      padding: 0.3rem 0.6rem;
-      border-radius: 6px;
-      font-size: 0.72rem;
-      font-weight: 600;
-      cursor: pointer;
-      border: 1px solid rgba(248,113,113,0.15);
-      background: transparent;
-      color: var(--text-muted);
-      transition: all 0.2s;
-    }
-    .btn-delete:hover {
-      background: rgba(248,113,113,0.1);
-      border-color: rgba(248,113,113,0.3);
-      color: var(--red);
-    }
-    .site-card-bottom {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 1rem;
-    }
-    .site-meta {
-      font-size: 0.72rem;
-      color: var(--text-muted);
-      display: flex;
-      gap: 0.75rem;
-    }
-    .sparkline-wrap {
-      flex: 1;
-      max-width: 200px;
-      height: 28px;
-    }
-    .sparkline-wrap svg {
-      width: 100%;
-      height: 100%;
-    }
-    .empty-state {
-      text-align: center;
-      padding: 3rem 1rem;
-      color: var(--text-muted);
-      font-size: 0.9rem;
-      background: var(--bg-card);
-      border: 1px dashed var(--border);
-      border-radius: 10px;
-      margin-bottom: 2.5rem;
-    }
+    .btn-delete { padding: 0.3rem 0.6rem; border-radius: 6px; font-size: 0.72rem; font-weight: 600; cursor: pointer; border: 1px solid rgba(248,113,113,0.15); background: transparent; color: var(--text-muted); transition: all 0.2s; }
+    .btn-delete:hover { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.3); color: var(--red); }
+    .site-meta { font-size: 0.72rem; color: var(--text-muted); display: flex; gap: 0.75rem; }
+    .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); font-size: 0.9rem; background: var(--bg-card); border: 1px dashed var(--border); border-radius: 10px; margin-bottom: 2.5rem; }
 
-    /* ===== DEPLOY FORM ===== */
-    .deploy-section {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.75rem;
-    }
-    .deploy-section h3 {
-      font-size: 1rem;
-      font-weight: 700;
-      margin-bottom: 1.25rem;
-    }
-    .form-row {
-      margin-bottom: 1.25rem;
-    }
-    .form-label {
-      display: block;
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--text-dim);
-      margin-bottom: 0.4rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .slug-input-wrap {
-      display: flex;
-      align-items: center;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-      transition: border-color 0.2s;
-    }
+    /* Deploy form */
+    .deploy-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.75rem; }
+    .deploy-section h3 { font-size: 1rem; font-weight: 700; margin-bottom: 1.25rem; }
+    .form-row { margin-bottom: 1.25rem; }
+    .form-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-dim); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .slug-input-wrap { display: flex; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; transition: border-color 0.2s; }
     .slug-input-wrap:focus-within { border-color: var(--accent); }
-    .slug-input {
-      flex: 1;
-      background: transparent;
-      border: none;
-      color: var(--text);
-      font-family: var(--mono);
-      font-size: 0.85rem;
-      padding: 0.6rem 0.75rem;
-      outline: none;
-    }
-    .slug-suffix {
-      font-family: var(--mono);
-      font-size: 0.82rem;
-      color: var(--text-muted);
-      padding-right: 0.75rem;
-      white-space: nowrap;
-    }
+    .slug-input { flex: 1; background: transparent; border: none; color: var(--text); font-family: var(--mono); font-size: 0.85rem; padding: 0.6rem 0.75rem; outline: none; }
+    .slug-suffix { font-family: var(--mono); font-size: 0.82rem; color: var(--text-muted); padding-right: 0.75rem; white-space: nowrap; }
 
-    /* Drop zone */
-    .drop-zone {
-      border: 2px dashed var(--border);
-      border-radius: 10px;
-      padding: 2.5rem 1rem;
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.2s;
-      margin-bottom: 1.25rem;
-    }
-    .drop-zone:hover,
-    .drop-zone.dragover {
-      border-color: var(--accent);
-      background: rgba(124,58,237,0.04);
-    }
-    .drop-zone-text {
-      font-size: 0.9rem;
-      color: var(--text-dim);
-      line-height: 1.6;
-    }
+    .drop-zone { border: 2px dashed var(--border); border-radius: 10px; padding: 2.5rem 1rem; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 1.25rem; }
+    .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: rgba(124,58,237,0.04); }
+    .drop-zone-text { font-size: 0.9rem; color: var(--text-dim); line-height: 1.6; }
     .drop-zone-text strong { color: var(--text); }
     .file-input { display: none; }
-    .drop-zone-or {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-top: 0.75rem;
-      justify-content: center;
-    }
-    .drop-zone-or span {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .btn-folder {
-      padding: 0.3rem 0.8rem;
-      border-radius: 6px;
-      font-size: 0.78rem;
-      font-weight: 600;
-      cursor: pointer;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text-dim);
-      font-family: var(--font);
-      transition: all 0.2s;
-    }
-    .btn-folder:hover {
-      color: var(--text);
-      border-color: var(--text-muted);
-    }
-    .selected-file {
-      font-size: 0.8rem;
-      color: var(--green);
-      margin-top: 0.5rem;
-      font-family: var(--mono);
-    }
+    .selected-file { font-size: 0.8rem; color: var(--green); margin-top: 0.5rem; font-family: var(--mono); }
 
-    /* Deploy button */
-    .btn-deploy {
-      width: 100%;
-      padding: 0.75rem;
-      border-radius: 10px;
-      font-family: var(--font);
-      font-size: 0.95rem;
-      font-weight: 700;
-      cursor: pointer;
-      border: none;
-      background: var(--cta);
-      color: #fff;
-      transition: all 0.2s;
-    }
-    .btn-deploy:hover:not(:disabled) {
-      background: var(--cta-hover);
-      box-shadow: 0 0 30px rgba(124,58,237,0.3);
-    }
-    .btn-deploy:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
+    .btn-deploy { width: 100%; padding: 0.75rem; border-radius: 10px; font-family: var(--font); font-size: 0.95rem; font-weight: 700; cursor: pointer; border: none; background: var(--cta); color: #fff; transition: all 0.2s; }
+    .btn-deploy:hover:not(:disabled) { background: var(--cta-hover); box-shadow: 0 0 30px rgba(124,58,237,0.3); }
+    .btn-deploy:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    /* Status messages */
-    .deploy-status {
-      margin-top: 1rem;
-      padding: 0.75rem 1rem;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      display: none;
-    }
-    .deploy-status.success {
-      display: block;
-      background: rgba(52,211,153,0.1);
-      border: 1px solid rgba(52,211,153,0.2);
-      color: var(--green);
-    }
-    .deploy-status.error {
-      display: block;
-      background: rgba(248,113,113,0.1);
-      border: 1px solid rgba(248,113,113,0.2);
-      color: var(--red);
-    }
-    .deploy-status.loading {
-      display: block;
-      background: rgba(96,165,250,0.1);
-      border: 1px solid rgba(96,165,250,0.2);
-      color: var(--blue);
-    }
+    .deploy-status { margin-top: 1rem; padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.85rem; display: none; }
+    .deploy-status.success { display: block; background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.2); color: var(--green); }
+    .deploy-status.error { display: block; background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.2); color: var(--red); }
+    .deploy-status.loading { display: block; background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.2); color: var(--blue); }
 
-    /* ===== CLI SECTION ===== */
-    .cli-section {
-      margin-top: 2rem;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem 1.5rem;
-    }
-    .cli-section h4 {
-      font-size: 0.82rem;
-      font-weight: 600;
-      color: var(--text-dim);
-      margin-bottom: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .cli-code {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.6rem 1rem;
-      font-family: var(--mono);
-      font-size: 0.8rem;
-      color: var(--green);
-      word-break: break-all;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
-    }
-    .btn-copy {
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.7rem;
-      cursor: pointer;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text-dim);
-      flex-shrink: 0;
-      transition: all 0.2s;
-    }
-    .btn-copy:hover {
-      color: var(--text);
-      border-color: var(--text-muted);
-    }
-
-    /* ===== LIGHT MODE OVERRIDES ===== */
-    html.light .btn-sm-ghost {
-      border-color: var(--border);
-      color: var(--text-dim);
-    }
-    html.light .drop-zone:hover,
-    html.light .drop-zone.dragover {
-      background: rgba(124,58,237,0.06);
-    }
-    html.light .cli-code {
-      background: var(--bg-card);
-    }
-    html.light .deploy-status.success {
-      background: rgba(5,150,105,0.08);
-      border-color: rgba(5,150,105,0.2);
-    }
-    html.light .deploy-status.error {
-      background: rgba(239,68,68,0.08);
-      border-color: rgba(239,68,68,0.2);
-    }
-    html.light .deploy-status.loading {
-      background: rgba(37,99,235,0.08);
-      border-color: rgba(37,99,235,0.2);
-    }
-
-    /* Lang toggle */
+    /* Lang/theme toggles */
     .lang-toggle .lang-zh { display: none; }
-    .lang-toggle {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text-dim);
-      cursor: pointer;
-      transition: all 0.2s;
-      font-size: 0.75rem;
-      font-weight: 700;
-      font-family: var(--font);
-    }
-    .lang-toggle:hover {
-      color: var(--text);
-      border-color: var(--text-muted);
-    }
-
-    /* Theme toggle */
-    .theme-toggle {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text-dim);
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .theme-toggle:hover {
-      color: var(--text);
-      border-color: var(--text-muted);
-    }
+    .lang-toggle, .theme-toggle { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; transition: all 0.2s; font-size: 0.75rem; font-weight: 700; font-family: var(--font); }
+    .lang-toggle:hover, .theme-toggle:hover { color: var(--text); border-color: var(--text-muted); }
     .theme-toggle .icon-sun { display: none; }
     .theme-toggle .icon-moon { display: block; }
     html.light .theme-toggle .icon-sun { display: block; }
     html.light .theme-toggle .icon-moon { display: none; }
 
-    /* ===== RESPONSIVE ===== */
+    .hidden { display: none !important; }
+
     @media (max-width: 600px) {
       .navbar { padding: 0.75rem 1rem; }
       .main { padding: 1.5rem 1rem 3rem; }
-      .overview-bar { grid-template-columns: 1fr; }
       .site-card-top { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
       .site-card-right { margin-left: 14px; }
-      .site-card-bottom { flex-direction: column; align-items: flex-start; }
-      .sparkline-wrap { max-width: 100%; width: 100%; }
     }
-
-    /* ===== AI CHAT ===== */
-    .ai-section {
-      margin-top: 2rem;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.5rem;
-    }
-    .ai-section h3 {
-      font-size: 1rem;
-      font-weight: 700;
-      margin-bottom: 0.5rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-    .ai-section h3 .ai-badge {
-      font-size: 0.65rem;
-      font-weight: 700;
-      background: linear-gradient(135deg, var(--cta), #ec4899);
-      color: #fff;
-      padding: 0.15rem 0.5rem;
-      border-radius: 100px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .ai-site-select {
-      margin-bottom: 1rem;
-    }
-    .ai-site-select select {
-      width: 100%;
-      padding: 0.5rem 0.75rem;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--mono);
-      font-size: 0.82rem;
-      outline: none;
-      cursor: pointer;
-    }
-    .ai-site-select select:focus { border-color: var(--accent); }
-    .ai-messages {
-      min-height: 120px;
-      max-height: 400px;
-      overflow-y: auto;
-      margin-bottom: 1rem;
-      padding: 0.75rem;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-    }
-    .ai-msg {
-      margin-bottom: 0.75rem;
-      padding: 0.6rem 0.85rem;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      line-height: 1.5;
-      max-width: 85%;
-      word-wrap: break-word;
-    }
-    .ai-msg.user {
-      background: rgba(124,58,237,0.15);
-      border: 1px solid rgba(124,58,237,0.2);
-      margin-left: auto;
-      text-align: right;
-    }
-    .ai-msg.assistant {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-    }
-    .ai-msg.tool {
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      background: transparent;
-      border: none;
-      padding: 0.2rem 0.5rem;
-      max-width: 100%;
-    }
-    .ai-msg.system {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      text-align: center;
-      max-width: 100%;
-      background: transparent;
-      border: none;
-    }
-    .ai-input-wrap {
-      display: flex;
-      gap: 0.5rem;
-    }
-    .ai-input-wrap textarea {
-      flex: 1;
-      resize: none;
-      padding: 0.6rem 0.75rem;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--font);
-      font-size: 0.85rem;
-      outline: none;
-      min-height: 40px;
-      max-height: 120px;
-    }
-    .ai-input-wrap textarea:focus { border-color: var(--accent); }
-    .ai-input-wrap button {
-      padding: 0.6rem 1.2rem;
-      border-radius: 8px;
-      border: none;
-      background: var(--cta);
-      color: #fff;
-      font-family: var(--font);
-      font-size: 0.85rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      white-space: nowrap;
-    }
-    .ai-input-wrap button:hover:not(:disabled) { background: var(--cta-hover); }
-    .ai-input-wrap button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .ai-locked {
-      text-align: center;
-      padding: 2rem 1rem;
-      color: var(--text-muted);
-    }
-    .ai-locked p { margin-bottom: 1rem; font-size: 0.9rem; }
-    .ai-locked .btn-upgrade {
-      padding: 0.55rem 1.5rem;
-      border-radius: 8px;
-      border: none;
-      background: linear-gradient(135deg, var(--cta), #ec4899);
-      color: #fff;
-      font-family: var(--font);
-      font-size: 0.85rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: opacity 0.2s;
-    }
-    .ai-locked .btn-upgrade:hover { opacity: 0.9; }
-    .ai-quota {
-      font-size: 0.72rem;
-      color: var(--text-muted);
-      text-align: right;
-      margin-top: 0.4rem;
-    }
-
-    .hidden { display: none !important; }
   </style>
   <script>
     (function() {
@@ -746,120 +142,68 @@
 </head>
 <body>
 
-  <!-- NAVBAR -->
   <nav class="navbar">
     <a href="/" class="nav-brand">Pipee <span>Console</span></a>
     <div class="nav-right">
-      <a href="/explore" class="btn-sm btn-sm-ghost" data-i18n="nav.explore" style="text-decoration:none">Explore</a>
-      <a href="/pricing" class="btn-sm btn-sm-ghost" data-i18n="nav.pricing" style="text-decoration:none">Pricing</a>
       <span class="nav-user" id="nav-user"></span>
-      <button class="btn-sm btn-sm-primary hidden" id="btn-login" onclick="doLogin()" data-i18n="console.login.navBtn">Login</button>
       <button class="btn-sm btn-sm-ghost hidden" id="btn-logout" onclick="doLogout()" data-i18n="console.logout">Logout</button>
       <button class="lang-toggle" onclick="toggleLang()"><span class="lang-en">中</span><span class="lang-zh">EN</span></button>
-      <button class="theme-toggle" onclick="toggleTheme()" data-i18n-title="theme.toggle" title="Toggle theme">
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
         <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
         <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
       </button>
     </div>
   </nav>
 
-  <!-- LOGIN PROMPT (shown when not logged in) -->
+  <!-- LOGIN / REGISTER -->
   <div class="main hidden" id="view-login">
     <div class="login-prompt">
-      <h2 data-i18n="console.login.title">Deploy your site for free</h2>
-      <p data-i18n="console.login.sub">Login to start deploying static websites to pipee.tw</p>
-      <button class="btn-sm btn-sm-primary" style="padding: 0.65rem 2rem; font-size: 0.95rem;" onclick="doLogin()" data-i18n="console.login.btn">Login to Continue</button>
+      <h2 data-i18n="console.login.title">Deploy your site</h2>
+      <p data-i18n="console.login.sub">Login or register to start deploying static websites</p>
+      <div class="auth-form" id="auth-form">
+        <div class="auth-error hidden" id="auth-error"></div>
+        <input type="text" id="auth-username" placeholder="Username" autocomplete="username">
+        <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
+        <button class="btn-auth" id="btn-auth" onclick="doAuth()">Login</button>
+        <div class="auth-toggle">
+          <span id="auth-toggle-text" data-i18n="console.noAccount">No account?</span>
+          <a id="auth-toggle-link" onclick="toggleAuthMode()">Register</a>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- DASHBOARD (shown when logged in) -->
+  <!-- DASHBOARD -->
   <div class="main hidden" id="view-dashboard">
-    <!-- Site list -->
     <div class="section-head">
       <h2 data-i18n="console.mySites">My Sites</h2>
-      <span class="quota" id="quota-badge">0/3</span>
-    </div>
-
-    <div class="overview-bar hidden" id="overview-bar">
-      <div class="overview-stat">
-        <div class="overview-value green" id="ov-sites">0</div>
-        <div class="overview-label" data-i18n="console.ov.sites">SITES ONLINE</div>
-      </div>
-      <div class="overview-stat">
-        <div class="overview-value blue" id="ov-visits">0</div>
-        <div class="overview-label" data-i18n="console.ov.visits">TODAY'S VISITS</div>
-      </div>
-      <div class="overview-stat">
-        <div class="overview-value purple" id="ov-storage">0</div>
-        <div class="overview-label" data-i18n="console.ov.storage">STORAGE USED</div>
-      </div>
+      <span class="quota" id="quota-badge">0/10</span>
     </div>
 
     <div id="site-list" class="site-list"></div>
     <div id="empty-state" class="empty-state hidden" data-i18n="console.empty">No sites yet. Deploy your first site below.</div>
 
-    <!-- Deploy form -->
     <div class="deploy-section">
       <h3 data-i18n="console.deploy.title">Deploy New Site</h3>
       <div class="form-row">
         <label class="form-label" data-i18n="console.slug.label">Slug</label>
         <div class="slug-input-wrap">
-          <input type="text" class="slug-input" id="slug-input" placeholder="my-site" data-i18n-placeholder="console.slug.placeholder" pattern="[a-z0-9][a-z0-9-]*[a-z0-9]" />
-          <span class="slug-suffix">.pipee.tw</span>
+          <input type="text" class="slug-input" id="slug-input" placeholder="my-site" pattern="[a-z0-9][a-z0-9-]*[a-z0-9]" />
+          <span class="slug-suffix" id="slug-suffix">.localhost:3939</span>
         </div>
       </div>
       <div class="form-row">
         <label class="form-label" data-i18n="console.upload.label">Upload</label>
         <div class="drop-zone" id="drop-zone">
           <div class="drop-zone-text" data-i18n-html="console.dropzone">
-            <strong>Drag &amp; drop</strong> a ZIP or folder here<br>
-            or click to select ZIP
-          </div>
-          <div class="drop-zone-or">
-            <button class="btn-folder" onclick="event.stopPropagation(); document.getElementById('folder-input').click();" data-i18n="console.folder.btn">Select Folder</button>
+            <strong>Drag &amp; drop</strong> a ZIP file here<br>or click to select
           </div>
           <div class="selected-file hidden" id="selected-file"></div>
-          <input type="file" class="file-input" id="file-input" accept=".zip,.tar.gz,.tgz" />
-          <input type="file" class="file-input" id="folder-input" webkitdirectory />
+          <input type="file" class="file-input" id="file-input" accept=".zip" />
         </div>
       </div>
       <button class="btn-deploy" id="btn-deploy" onclick="doDeploy()" disabled data-i18n="console.deploy.btn">Deploy</button>
       <div class="deploy-status" id="deploy-status"></div>
-    </div>
-
-    <!-- CLI token -->
-    <div class="cli-section">
-      <h4 data-i18n="console.cli.title">CLI Deploy</h4>
-      <div class="cli-code">
-        <span id="cli-token-display">npx pipee deploy --token ****</span>
-        <button class="btn-copy" onclick="copyToken()" data-i18n="console.cli.copy">Copy</button>
-      </div>
-    </div>
-
-    <!-- AI Edit Section -->
-    <div class="ai-section" id="ai-section">
-      <h3><span data-i18n="console.ai.title">AI Website Editor</span> <span class="ai-badge">Creator</span></h3>
-
-      <!-- Locked state (non-creator) -->
-      <div class="ai-locked" id="ai-locked">
-        <p data-i18n="console.ai.locked">Upgrade to Creator plan to edit your sites with AI.</p>
-        <a href="/pricing" class="btn-upgrade" data-i18n="console.ai.upgrade">Upgrade to Creator</a>
-      </div>
-
-      <!-- Unlocked state (creator) -->
-      <div class="hidden" id="ai-unlocked">
-        <div class="ai-site-select">
-          <select id="ai-site-select">
-            <option value="" data-i18n="console.ai.selectSite">-- Select a site --</option>
-          </select>
-        </div>
-        <div class="ai-messages" id="ai-messages"></div>
-        <div class="ai-input-wrap">
-          <textarea id="ai-input" placeholder="告訴 AI 你想改什麼..." data-i18n-placeholder="console.ai.placeholder" rows="1"></textarea>
-          <button id="ai-send-btn" onclick="sendAiEdit()" disabled data-i18n="console.ai.send">Send</button>
-        </div>
-        <div class="ai-quota" id="ai-quota"></div>
-      </div>
     </div>
   </div>
 
@@ -872,70 +216,40 @@
   </script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script>
-  // ── Pipee i18n ──
+  // ── i18n ──
   var T = {
-    'console.login.title': { en: 'Deploy your site for free', zh: '免費部署你的網站' },
-    'console.login.sub': { en: 'Login to start deploying static websites to pipee.tw', zh: '登入即可開始部署靜態網站到 pipee.tw' },
-    'console.login.btn': { en: 'Login to Continue', zh: '登入以繼續' },
-    'console.login.navBtn': { en: 'Login', zh: '登入' },
+    'console.login.title': { en: 'Deploy your site', zh: '部署你的網站' },
+    'console.login.sub': { en: 'Login or register to start deploying static websites', zh: '登入或註冊以開始部署靜態網站' },
     'console.logout': { en: 'Logout', zh: '登出' },
     'console.mySites': { en: 'My Sites', zh: '我的網站' },
     'console.empty': { en: 'No sites yet. Deploy your first site below.', zh: '尚無網站。在下方部署你的第一個網站。' },
     'console.delete': { en: 'Delete', zh: '刪除' },
-    'console.delete.confirm': { en: 'Delete {slug}.pipee.tw? This cannot be undone.', zh: '刪除 {slug}.pipee.tw？此操作無法復原。' },
+    'console.delete.confirm': { en: 'Delete site "{slug}"? This cannot be undone.', zh: '刪除網站 "{slug}"？此操作無法復原。' },
     'console.deploy.title': { en: 'Deploy New Site', zh: '部署新網站' },
     'console.slug.label': { en: 'Slug', zh: '網址名稱' },
-    'console.slug.placeholder': { en: 'my-site', zh: 'my-site' },
     'console.upload.label': { en: 'Upload', zh: '上傳' },
-    'console.dropzone': { en: '<strong>Drag & drop</strong> a ZIP or folder here<br>or click to select ZIP', zh: '<strong>拖放</strong> ZIP 或資料夾到此處<br>或點擊選擇 ZIP' },
-    'console.folder.btn': { en: 'Select Folder', zh: '選擇資料夾' },
-    'console.folder.packing': { en: 'Packing folder...', zh: '打包資料夾中...' },
-    'console.folder.packed': { en: 'folder', zh: '資料夾' },
-    'console.folder.files': { en: 'files', zh: '個檔案' },
+    'console.dropzone': { en: '<strong>Drag & drop</strong> a ZIP file here<br>or click to select', zh: '<strong>拖放</strong> ZIP 檔案到此處<br>或點擊選擇' },
     'console.deploy.btn': { en: 'Deploy', zh: '部署' },
     'console.deploy.deploying': { en: 'Deploying...', zh: '部署中...' },
     'console.deploy.uploading': { en: 'Uploading and deploying...', zh: '正在上傳與部署...' },
     'console.deploy.success': { en: 'Deployed!', zh: '部署成功！' },
-    'console.deploy.notLoggedIn': { en: 'Not logged in. Please refresh and login again.', zh: '未登入。請重新整理並再次登入。' },
     'console.deploy.failed': { en: 'Deploy failed', zh: '部署失敗' },
-    'console.upload.invalidType': { en: 'Please upload a .zip or .tar.gz file', zh: '請上傳 .zip 或 .tar.gz 檔案' },
-    'console.cli.title': { en: 'CLI Deploy', zh: 'CLI 部署' },
-    'console.cli.copy': { en: 'Copy', zh: '複製' },
-    'console.cli.copied': { en: 'Copied!', zh: '已複製！' },
-    'console.loginFailed': { en: 'Login failed', zh: '登入失敗' },
-    'console.loginUnavailable': { en: 'Login service unavailable. Please try again later.', zh: '登入服務暫時無法使用，請稍後再試。' },
-    'console.deleteFailed': { en: 'Delete failed', zh: '刪除失敗' },
+    'console.upload.invalidType': { en: 'Please upload a .zip file', zh: '請上傳 .zip 檔案' },
+    'console.noAccount': { en: 'No account?', zh: '沒有帳號？' },
+    'console.hasAccount': { en: 'Already have an account?', zh: '已有帳號？' },
+    'console.register': { en: 'Register', zh: '註冊' },
+    'console.login': { en: 'Login', zh: '登入' },
     'console.updated': { en: 'Updated', zh: '更新於' },
+    'console.meta.title': { en: 'Pipee Console', zh: 'Pipee 控制台' },
     'time.justNow': { en: 'just now', zh: '剛剛' },
     'time.m': { en: 'm ago', zh: '分鐘前' },
     'time.h': { en: 'h ago', zh: '小時前' },
     'time.d': { en: 'd ago', zh: '天前' },
-    'console.meta.title': { en: 'Pipee Console', zh: 'Pipee 控制台' },
-    'theme.toggle': { en: 'Toggle theme', zh: '切換主題' },
-    'console.ov.sites': { en: 'SITES ONLINE', zh: '上線網站' },
-    'console.ov.visits': { en: "TODAY'S VISITS", zh: '今日訪問' },
-    'console.ov.storage': { en: 'STORAGE USED', zh: '已用空間' },
-    'console.hits.today': { en: 'today', zh: '今日' },
-    'console.hits.total': { en: 'total', zh: '總計' },
-    'nav.explore': { en: 'Explore', zh: '探索' },
-    'nav.pricing': { en: 'Pricing', zh: '定價' },
-    'console.ai.title': { en: 'AI Website Editor', zh: 'AI 網站編輯' },
-    'console.ai.locked': { en: 'Upgrade to Creator plan to edit your sites with AI.', zh: '升級至 Creator 方案，即可用 AI 編輯你的網站。' },
-    'console.ai.upgrade': { en: 'Upgrade to Creator', zh: '升級至 Creator' },
-    'console.ai.selectSite': { en: '-- Select a site --', zh: '-- 選擇網站 --' },
-    'console.ai.placeholder': { en: 'Tell AI what to change...', zh: '告訴 AI 你想改什麼...' },
-    'console.ai.send': { en: 'Send', zh: '送出' },
-    'console.ai.sending': { en: 'Thinking...', zh: '思考中...' },
-    'console.ai.done': { en: 'Done! Site updated.', zh: '完成！網站已更新。' },
-    'console.ai.quota': { en: '{remaining} edits remaining this month', zh: '本月剩餘 {remaining} 次編輯' },
-    'console.ai.noSite': { en: 'Please select a site first', zh: '請先選擇網站' },
   };
   var currentLang = localStorage.getItem('pipee-lang') || (navigator.language.startsWith('zh') ? 'zh' : 'en');
   function t(key) { return T[key] && T[key][currentLang] || T[key] && T[key].en || key; }
   function applyLang() {
     document.querySelectorAll('[data-i18n]').forEach(function(el) { el.textContent = t(el.dataset.i18n); });
-    document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) { el.placeholder = t(el.dataset.i18nPlaceholder); });
-    document.querySelectorAll('[data-i18n-title]').forEach(function(el) { el.title = t(el.dataset.i18nTitle); });
     document.querySelectorAll('[data-i18n-html]').forEach(function(el) { el.innerHTML = t(el.dataset.i18nHtml); });
     document.documentElement.lang = currentLang === 'zh' ? 'zh-Hant' : 'en';
     var titleKey = document.querySelector('title') && document.querySelector('title').dataset.i18n;
@@ -950,22 +264,16 @@
   applyLang();
   </script>
   <script>
-    // ── HTML escaping ──
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str;
-      return div.innerHTML;
-    }
+    function escapeHtml(str) { var d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
 
     // State
     let currentUser = null;
-    let deployToken = null;
+    let authToken = null;
     let selectedFile = null;
+    let isRegisterMode = false;
 
-    // Elements
     const $login = document.getElementById('view-login');
     const $dashboard = document.getElementById('view-dashboard');
-    const $btnLogin = document.getElementById('btn-login');
     const $btnLogout = document.getElementById('btn-logout');
     const $navUser = document.getElementById('nav-user');
     const $siteList = document.getElementById('site-list');
@@ -977,63 +285,60 @@
     const $selectedFile = document.getElementById('selected-file');
     const $btnDeploy = document.getElementById('btn-deploy');
     const $deployStatus = document.getElementById('deploy-status');
-    const $cliTokenDisplay = document.getElementById('cli-token-display');
+    const $authError = document.getElementById('auth-error');
 
-    // ── Get current LetMeUse access token ──
-    function getLmuToken() {
-      if (window.letmeuse && window.letmeuse.getToken) {
-        return window.letmeuse.getToken();
-      }
-      return localStorage.getItem('pipee_lmu_token');
+    // ── Auth ──
+    function toggleAuthMode() {
+      isRegisterMode = !isRegisterMode;
+      document.getElementById('btn-auth').textContent = isRegisterMode ? t('console.register') : t('console.login');
+      document.getElementById('auth-toggle-text').textContent = isRegisterMode ? t('console.hasAccount') : t('console.noAccount');
+      document.getElementById('auth-toggle-link').textContent = isRegisterMode ? t('console.login') : t('console.register');
+      $authError.classList.add('hidden');
     }
+
+    async function doAuth() {
+      const username = document.getElementById('auth-username').value.trim();
+      const password = document.getElementById('auth-password').value;
+      if (!username || !password) return;
+
+      $authError.classList.add('hidden');
+      const endpoint = isRegisterMode ? '/api/auth/register' : '/api/auth/login';
+
+      try {
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          $authError.textContent = data.error || 'Error';
+          $authError.classList.remove('hidden');
+          return;
+        }
+        authToken = data.token;
+        currentUser = data.user;
+        localStorage.setItem('pipee_token', authToken);
+        showDashboard();
+        loadSites();
+      } catch (err) {
+        $authError.textContent = err.message;
+        $authError.classList.remove('hidden');
+      }
+    }
+
+    // Enter key to submit
+    document.getElementById('auth-password').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') doAuth();
+    });
 
     // ── Init ──
     async function init() {
-      deployToken = localStorage.getItem('pipee_deploy_token');
-
-      // Load SDK first — it auto-restores sessions from localStorage
-      await loadLetMeUseSDK();
-
-      if (window.letmeuse) {
-        setupAuthListener();
-
-        // SDK auto-detects existing session; if user already logged in, onAuthChange fires
-        // Give it a moment to restore session
-        await new Promise(r => setTimeout(r, 300));
-
-        if (window.letmeuse.user && deployToken) {
-          // Already have SDK session + deploy token — verify with backend
-          const token = getLmuToken();
-          if (token) {
-            try {
-              const resp = await fetch('/api/auth/me', {
-                headers: { 'Authorization': 'Bearer ' + token }
-              });
-              if (resp.ok) {
-                const data = await resp.json();
-                currentUser = data.user;
-                showDashboard();
-                loadSites();
-                return;
-              }
-            } catch { /* fall through to login view */ }
-          }
-        } else if (window.letmeuse.user && !deployToken) {
-          // Have SDK session but no deploy token — register with Pipee backend
-          const token = getLmuToken();
-          if (token) {
-            const ok = await handlePipeeLogin(token);
-            if (ok) return;
-          }
-        }
-      }
-
-      // Fallback: try with saved token (SDK failed to load)
-      const savedToken = localStorage.getItem('pipee_lmu_token');
-      if (deployToken && savedToken) {
+      authToken = localStorage.getItem('pipee_token');
+      if (authToken) {
         try {
-          const resp = await fetch('/api/auth/me', {
-            headers: { 'Authorization': 'Bearer ' + savedToken }
+          const resp = await fetch('/api/user/me', {
+            headers: { 'Authorization': 'Bearer ' + authToken },
           });
           if (resp.ok) {
             const data = await resp.json();
@@ -1043,89 +348,15 @@
             return;
           }
         } catch { /* fall through */ }
-        localStorage.removeItem('pipee_deploy_token');
-        localStorage.removeItem('pipee_lmu_token');
-        deployToken = null;
+        localStorage.removeItem('pipee_token');
+        authToken = null;
       }
-
       showLogin();
     }
 
-    // ── Load LetMeUse SDK dynamically ──
-    function loadLetMeUseSDK() {
-      return new Promise((resolve) => {
-        if (window.letmeuse && window.letmeuse.ready) return resolve();
-        const script = document.createElement('script');
-        script.src = 'https://letmeuse.isnowfriend.com/letmeuse.js';
-        script.setAttribute('data-app-id', 'app_LwmRGw');
-        script.setAttribute('data-theme', document.documentElement.classList.contains('light') ? 'light' : 'dark');
-        script.setAttribute('data-accent', '#a78bfa');
-        script.setAttribute('data-locale', 'zh');
-        script.setAttribute('data-mode', 'modal');
-        script.onload = () => {
-          const check = setInterval(() => {
-            if (window.letmeuse && window.letmeuse.ready) {
-              clearInterval(check);
-              resolve();
-            }
-          }, 100);
-          // Timeout after 5s
-          setTimeout(() => { clearInterval(check); resolve(); }, 5000);
-        };
-        script.onerror = () => resolve();
-        document.head.appendChild(script);
-      });
-    }
-
-    // ── Set up auth change listener (once) ──
-    let authListenerSet = false;
-    function setupAuthListener() {
-      if (authListenerSet) return;
-      authListenerSet = true;
-      window.letmeuse.onAuthChange(async (user) => {
-        if (user) {
-          const token = getLmuToken();
-          if (token) await handlePipeeLogin(token);
-        } else {
-          doLogout();
-        }
-      });
-    }
-
-    // ── Register/login with Pipee backend using LetMeUse token ──
-    async function handlePipeeLogin(token) {
-      try {
-        const resp = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token }),
-        });
-        if (!resp.ok) {
-          const err = await resp.json();
-          alert(err.error || t('console.loginFailed'));
-          showLogin();
-          return false;
-        }
-        const data = await resp.json();
-        currentUser = data.user;
-        deployToken = data.deployToken;
-        localStorage.setItem('pipee_deploy_token', deployToken);
-        localStorage.setItem('pipee_lmu_token', token);
-        showDashboard();
-        loadSites();
-        return true;
-      } catch (err) {
-        console.error('Pipee login error:', err);
-        showLogin();
-        return false;
-      }
-    }
-
-    // ── Views ──
     function showLogin() {
       $login.classList.remove('hidden');
       $dashboard.classList.add('hidden');
-      $btnLogin.classList.remove('hidden');
       $btnLogout.classList.add('hidden');
       $navUser.textContent = '';
     }
@@ -1133,163 +364,62 @@
     function showDashboard() {
       $login.classList.add('hidden');
       $dashboard.classList.remove('hidden');
-      $btnLogin.classList.add('hidden');
       $btnLogout.classList.remove('hidden');
-      $navUser.textContent = currentUser.name || currentUser.email || 'User';
-      var maskedToken = deployToken ? deployToken.slice(0, 8) + '...' + deployToken.slice(-4) : '****';
-      $cliTokenDisplay.textContent = 'npx pipee deploy --token ' + maskedToken;
-      initAiSection();
-    }
-
-    // ── Auth ──
-    async function doLogin() {
-      if (!window.letmeuse) {
-        await loadLetMeUseSDK();
-        if (window.letmeuse) setupAuthListener();
-      }
-      if (!window.letmeuse) {
-        alert(t('console.loginUnavailable'));
-        return;
-      }
-      // Opens the LetMeUse login modal; onAuthChange fires on success
-      window.letmeuse.login();
+      $navUser.textContent = currentUser.username || 'User';
+      // Set slug suffix from current host
+      var suffix = document.getElementById('slug-suffix');
+      var host = location.host;
+      suffix.textContent = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+        ? ' (localhost)' : '.' + location.hostname;
     }
 
     function doLogout() {
       currentUser = null;
-      deployToken = null;
-      localStorage.removeItem('pipee_deploy_token');
-      localStorage.removeItem('pipee_lmu_token');
-      if (window.letmeuse && window.letmeuse.logout) {
-        window.letmeuse.logout();
-      }
+      authToken = null;
+      localStorage.removeItem('pipee_token');
       showLogin();
     }
 
     // ── Sites ──
     async function loadSites() {
-      const lmuToken = getLmuToken();
-      if (!lmuToken) return;
-
+      if (!authToken) return;
       try {
         const resp = await fetch('/api/user/sites', {
-          headers: { 'Authorization': 'Bearer ' + lmuToken },
+          headers: { 'Authorization': 'Bearer ' + authToken },
         });
         if (!resp.ok) return;
-
         const data = await resp.json();
-        renderSites(data.sites, data.stats);
-        $quotaBadge.textContent = `${data.quota.used}/${data.quota.max}`;
-        // Refresh AI site dropdown
-        if (currentUser && currentUser.plan === 'creator') {
-          populateAiSiteSelect(data.sites);
-        }
-      } catch (err) {
-        console.error('Load sites error:', err);
-      }
+        renderSites(data.sites);
+        $quotaBadge.textContent = data.quota.used + '/' + data.quota.max;
+      } catch (err) { /* ignore */ }
     }
 
-    function renderSites(sites, stats) {
-      const $overview = document.getElementById('overview-bar');
-
+    function renderSites(sites) {
       if (sites.length === 0) {
         $siteList.innerHTML = '';
         $emptyState.classList.remove('hidden');
-        $overview.classList.add('hidden');
         return;
       }
-
       $emptyState.classList.add('hidden');
-
-      // Overview bar
-      if (stats) {
-        $overview.classList.remove('hidden');
-        document.getElementById('ov-sites').textContent = sites.length;
-        document.getElementById('ov-visits').textContent = (stats.total_today || 0).toLocaleString();
-        document.getElementById('ov-storage').textContent = formatSize(stats.total_size || 0);
-      }
-
       $siteList.innerHTML = '';
       for (const s of sites) {
         const card = document.createElement('div');
         card.className = 'site-card';
-
-        // Top row
-        const top = document.createElement('div');
-        top.className = 'site-card-top';
-
-        const left = document.createElement('div');
-        left.className = 'site-card-left';
-        const dot = document.createElement('div');
-        dot.className = 'status-dot';
-        const link = document.createElement('a');
-        link.href = s.url;
-        link.target = '_blank';
-        link.className = 'site-url';
-        link.textContent = s.url.replace('https://', '');
-        left.appendChild(dot);
-        left.appendChild(link);
-
-        const right = document.createElement('div');
-        right.className = 'site-card-right';
-        const hits = document.createElement('span');
-        hits.className = 'site-hits';
-        hits.innerHTML = '<strong>' + ((s.hits_today || 0)).toLocaleString() + '</strong> ' + escapeHtml(t('console.hits.today'));
-        const delBtn = document.createElement('button');
-        delBtn.className = 'btn-delete';
-        delBtn.textContent = t('console.delete');
-        delBtn.addEventListener('click', () => deleteSite(s.slug));
-        right.appendChild(hits);
+        var top = document.createElement('div'); top.className = 'site-card-top';
+        var left = document.createElement('div'); left.className = 'site-card-left';
+        var dot = document.createElement('div'); dot.className = 'status-dot';
+        var link = document.createElement('a'); link.href = s.url; link.target = '_blank'; link.className = 'site-url'; link.textContent = s.slug;
+        left.appendChild(dot); left.appendChild(link);
+        var right = document.createElement('div'); right.className = 'site-card-right';
+        var delBtn = document.createElement('button'); delBtn.className = 'btn-delete'; delBtn.textContent = t('console.delete');
+        delBtn.addEventListener('click', function() { deleteSite(s.slug); });
         right.appendChild(delBtn);
-
-        top.appendChild(left);
-        top.appendChild(right);
-
-        // Bottom row
-        const bottom = document.createElement('div');
-        bottom.className = 'site-card-bottom';
-
-        const meta = document.createElement('div');
-        meta.className = 'site-meta';
-        meta.innerHTML = '<span>' + escapeHtml(formatSize(s.size)) + '</span>'
-          + '<span>' + ((s.hits_total || 0)).toLocaleString() + ' ' + escapeHtml(t('console.hits.total')) + '</span>'
-          + '<span>' + escapeHtml(t('console.updated')) + ' ' + escapeHtml(formatDate(s.updated_at)) + '</span>';
-
-        const sparkWrap = document.createElement('div');
-        sparkWrap.className = 'sparkline-wrap';
-        if (s.sparkline && s.sparkline.length > 0) {
-          sparkWrap.innerHTML = renderSparkline(s.sparkline);
-        }
-
-        bottom.appendChild(meta);
-        bottom.appendChild(sparkWrap);
-
-        card.appendChild(top);
-        card.appendChild(bottom);
+        top.appendChild(left); top.appendChild(right);
+        var meta = document.createElement('div'); meta.className = 'site-meta';
+        meta.innerHTML = '<span>' + escapeHtml(formatSize(s.size)) + '</span><span>' + escapeHtml(t('console.updated')) + ' ' + escapeHtml(formatDate(s.updated_at)) + '</span>';
+        card.appendChild(top); card.appendChild(meta);
         $siteList.appendChild(card);
       }
-    }
-
-    function renderSparkline(data) {
-      if (!data || data.length === 0) return '';
-      var max = Math.max.apply(null, data.concat([1]));
-      var w = 200, h = 28, pad = 2;
-      var usable = h - pad * 2;
-      var step = w / Math.max(data.length - 1, 1);
-
-      var pts = [];
-      for (var i = 0; i < data.length; i++) {
-        var x = (i * step).toFixed(1);
-        var y = (pad + usable - (data[i] / max) * usable).toFixed(1);
-        pts.push(x + ',' + y);
-      }
-      var line = pts.join(' ');
-      var area = '0,' + h + ' ' + line + ' ' + ((data.length - 1) * step).toFixed(1) + ',' + h;
-
-      return '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">'
-        + '<polygon points="' + area + '" fill="rgba(167,139,250,0.12)" />'
-        + '<polyline points="' + line + '" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />'
-        + '</svg>';
     }
 
     function formatSize(bytes) {
@@ -1299,89 +429,41 @@
     }
 
     function formatDate(iso) {
-      const d = new Date(iso);
-      const now = new Date();
-      const diffMs = now - d;
-      const diffMin = Math.floor(diffMs / 60000);
+      var d = new Date(iso); var now = new Date(); var diffMs = now - d; var diffMin = Math.floor(diffMs / 60000);
       if (diffMin < 1) return t('time.justNow');
       if (diffMin < 60) return diffMin + t('time.m');
-      const diffH = Math.floor(diffMin / 60);
+      var diffH = Math.floor(diffMin / 60);
       if (diffH < 24) return diffH + t('time.h');
-      const diffD = Math.floor(diffH / 24);
+      var diffD = Math.floor(diffH / 24);
       if (diffD < 30) return diffD + t('time.d');
       return d.toLocaleDateString();
     }
 
     async function deleteSite(slug) {
       if (!confirm(t('console.delete.confirm').replace('{slug}', slug))) return;
-
-      const lmuToken = getLmuToken();
       try {
-        const resp = await fetch('/api/user/sites/' + slug, {
+        var resp = await fetch('/api/user/sites/' + slug, {
           method: 'DELETE',
-          headers: { 'Authorization': 'Bearer ' + lmuToken },
+          headers: { 'Authorization': 'Bearer ' + authToken },
         });
-        if (resp.ok) {
-          loadSites();
-        } else {
-          const err = await resp.json();
-          alert(err.error || t('console.deleteFailed'));
-        }
-      } catch (err) {
-        alert(t('console.deleteFailed') + ': ' + err.message);
-      }
+        if (resp.ok) loadSites();
+        else { var err = await resp.json(); alert(err.error || 'Delete failed'); }
+      } catch (err) { alert('Delete failed: ' + err.message); }
     }
 
     // ── Deploy ──
-    const $folderInput = document.getElementById('folder-input');
-
-    // Drag and drop
-    $dropZone.addEventListener('click', () => $fileInput.click());
-    $dropZone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      $dropZone.classList.add('dragover');
+    $dropZone.addEventListener('click', function() { $fileInput.click(); });
+    $dropZone.addEventListener('dragover', function(e) { e.preventDefault(); $dropZone.classList.add('dragover'); });
+    $dropZone.addEventListener('dragleave', function() { $dropZone.classList.remove('dragover'); });
+    $dropZone.addEventListener('drop', function(e) {
+      e.preventDefault(); $dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) selectFile(e.dataTransfer.files[0]);
     });
-    $dropZone.addEventListener('dragleave', () => {
-      $dropZone.classList.remove('dragover');
-    });
-    $dropZone.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      $dropZone.classList.remove('dragover');
-
-      // Check if dropped item is a folder
-      const items = e.dataTransfer.items;
-      if (items && items.length > 0) {
-        const entry = items[0].webkitGetAsEntry && items[0].webkitGetAsEntry();
-        if (entry && entry.isDirectory) {
-          await handleFolderEntry(entry);
-          return;
-        }
-      }
-      // Fallback: regular file
-      if (e.dataTransfer.files.length > 0) {
-        selectFile(e.dataTransfer.files[0]);
-      }
-    });
-
-    $fileInput.addEventListener('change', () => {
-      if ($fileInput.files.length > 0) {
-        selectFile($fileInput.files[0]);
-      }
-    });
-
-    // Folder picker via webkitdirectory input
-    $folderInput.addEventListener('change', async () => {
-      if ($folderInput.files.length > 0) {
-        await handleFolderFiles($folderInput.files);
-      }
-    });
+    $fileInput.addEventListener('change', function() { if ($fileInput.files.length > 0) selectFile($fileInput.files[0]); });
 
     function selectFile(file) {
-      const validTypes = ['.zip', '.tar.gz', '.tgz'];
-      const name = file.name.toLowerCase();
-      if (!validTypes.some(ext => name.endsWith(ext))) {
-        alert(t('console.upload.invalidType'));
-        return;
+      if (!file.name.toLowerCase().endsWith('.zip')) {
+        alert(t('console.upload.invalidType')); return;
       }
       selectedFile = file;
       $selectedFile.textContent = file.name + ' (' + formatSize(file.size) + ')';
@@ -1389,106 +471,39 @@
       updateDeployButton();
     }
 
-    // ── Folder → ZIP ──
-    // Read all files from a dropped directory entry (recursive)
-    async function handleFolderEntry(dirEntry) {
-      $selectedFile.textContent = t('console.folder.packing');
-      $selectedFile.classList.remove('hidden');
-
-      const files = [];
-      await readDirectoryRecursive(dirEntry, '', files);
-      if (files.length === 0) return;
-
-      const zip = new JSZip();
-      for (const f of files) {
-        zip.file(f.path, f.file);
-      }
-      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-      selectedFile = new File([blob], dirEntry.name + '.zip', { type: 'application/zip' });
-      $selectedFile.textContent = dirEntry.name + '/ (' + files.length + ' ' + t('console.folder.files') + ', ' + formatSize(blob.size) + ')';
-      updateDeployButton();
-    }
-
-    function readDirectoryRecursive(dirEntry, basePath, results) {
-      return new Promise((resolve) => {
-        const reader = dirEntry.createReader();
-        const readBatch = () => {
-          reader.readEntries(async (entries) => {
-            if (entries.length === 0) { resolve(); return; }
-            for (const entry of entries) {
-              const entryPath = basePath ? basePath + '/' + entry.name : entry.name;
-              if (entry.isFile) {
-                const file = await new Promise((res) => entry.file(res));
-                results.push({ path: entryPath, file: file });
-              } else if (entry.isDirectory) {
-                await readDirectoryRecursive(entry, entryPath, results);
-              }
-            }
-            readBatch(); // Chrome returns entries in batches
-          });
-        };
-        readBatch();
-      });
-    }
-
-    // Handle folder from webkitdirectory file input
-    async function handleFolderFiles(fileList) {
-      $selectedFile.textContent = t('console.folder.packing');
-      $selectedFile.classList.remove('hidden');
-
-      const zip = new JSZip();
-      let folderName = '';
-      for (const file of fileList) {
-        // webkitRelativePath = "folderName/sub/file.txt"
-        const relPath = file.webkitRelativePath;
-        if (!folderName) folderName = relPath.split('/')[0];
-        // Strip root folder name to make files at root level
-        const inner = relPath.substring(relPath.indexOf('/') + 1);
-        if (inner) zip.file(inner, file);
-      }
-      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-      selectedFile = new File([blob], folderName + '.zip', { type: 'application/zip' });
-      $selectedFile.textContent = folderName + '/ (' + fileList.length + ' ' + t('console.folder.files') + ', ' + formatSize(blob.size) + ')';
-      updateDeployButton();
-    }
-
     $slugInput.addEventListener('input', updateDeployButton);
-
     function updateDeployButton() {
-      const slug = $slugInput.value.trim();
-      $btnDeploy.disabled = !slug || !selectedFile;
+      $btnDeploy.disabled = !$slugInput.value.trim() || !selectedFile;
     }
 
     async function doDeploy() {
-      const slug = $slugInput.value.trim().toLowerCase();
+      var slug = $slugInput.value.trim().toLowerCase();
       if (!slug || !selectedFile) return;
+      if (!authToken) { showStatus('error', 'Not logged in'); return; }
 
-      const lmuToken = getLmuToken();
-      if (!lmuToken) {
-        showStatus('error', t('console.deploy.notLoggedIn'));
-        return;
-      }
-
+      // First create the site
       $btnDeploy.disabled = true;
       $btnDeploy.textContent = t('console.deploy.deploying');
       showStatus('loading', t('console.deploy.uploading'));
 
       try {
-        const arrayBuffer = await selectedFile.arrayBuffer();
-
-        const resp = await fetch('/api/user/deploy?slug=' + encodeURIComponent(slug), {
+        // Create site (ignore 409 if already exists)
+        await fetch('/api/user/sites', {
           method: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + lmuToken,
-            'Content-Type': 'application/octet-stream',
-          },
-          body: arrayBuffer,
+          headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug: slug }),
         });
 
-        const data = await resp.json();
-
+        // Deploy
+        var arrayBuffer = await selectedFile.arrayBuffer();
+        var resp = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/deploy', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/octet-stream' },
+          body: arrayBuffer,
+        });
+        var data = await resp.json();
         if (resp.ok) {
-          const safeUrl = escapeHtml(data.url);
+          var safeUrl = escapeHtml(data.url);
           showStatus('success', t('console.deploy.success') + ' <a href="' + safeUrl + '" target="_blank" style="color:var(--green);font-weight:600">' + safeUrl + '</a>');
           selectedFile = null;
           $selectedFile.classList.add('hidden');
@@ -1512,228 +527,6 @@
       $deployStatus.innerHTML = msg;
     }
 
-    // ── Copy token ──
-    function copyToken() {
-      if (!deployToken) return;
-      const cmd = 'npx pipee deploy --token ' + deployToken;
-      navigator.clipboard.writeText(cmd).then(() => {
-        const btn = document.querySelector('.btn-copy');
-        btn.textContent = t('console.cli.copied');
-        setTimeout(() => { btn.textContent = t('console.cli.copy'); }, 1500);
-      });
-    }
-
-    // ── AI Edit ──
-    let aiStreaming = false;
-    let aiQuotaRemaining = null;
-
-    function initAiSection() {
-      const $locked = document.getElementById('ai-locked');
-      const $unlocked = document.getElementById('ai-unlocked');
-
-      if (currentUser && currentUser.plan === 'creator') {
-        $locked.classList.add('hidden');
-        $unlocked.classList.remove('hidden');
-        populateAiSiteSelect(null);
-      } else {
-        $locked.classList.remove('hidden');
-        $unlocked.classList.add('hidden');
-      }
-    }
-
-    let aiSitesList = [];
-    function populateAiSiteSelect(sites) {
-      const $select = document.getElementById('ai-site-select');
-      const prevValue = $select.value;
-      // Clear existing options except first
-      $select.innerHTML = '<option value="">' + t('console.ai.selectSite') + '</option>';
-
-      const list = sites || aiSitesList;
-      for (const s of list) {
-        const opt = document.createElement('option');
-        opt.value = s.slug;
-        opt.textContent = s.slug + '.pipee.tw';
-        $select.appendChild(opt);
-      }
-      if (sites) aiSitesList = sites;
-
-      // Restore previous selection if still valid
-      if (prevValue && list.some(s => s.slug === prevValue)) {
-        $select.value = prevValue;
-      }
-
-      $select.removeEventListener('change', updateAiSendButton);
-      $select.addEventListener('change', updateAiSendButton);
-    }
-
-    function updateAiSendButton() {
-      const $input = document.getElementById('ai-input');
-      const $select = document.getElementById('ai-site-select');
-      const $btn = document.getElementById('ai-send-btn');
-      $btn.disabled = aiStreaming || !$select.value || !$input.value.trim();
-    }
-
-    // Auto-resize textarea
-    document.addEventListener('input', (e) => {
-      if (e.target.id === 'ai-input') {
-        e.target.style.height = 'auto';
-        e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-        updateAiSendButton();
-      }
-    });
-
-    // Enter to send (Shift+Enter for newline)
-    document.addEventListener('keydown', (e) => {
-      if (e.target.id === 'ai-input' && e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        if (!document.getElementById('ai-send-btn').disabled) {
-          sendAiEdit();
-        }
-      }
-    });
-
-    async function sendAiEdit() {
-      const $input = document.getElementById('ai-input');
-      const $select = document.getElementById('ai-site-select');
-      const $messages = document.getElementById('ai-messages');
-      const $btn = document.getElementById('ai-send-btn');
-
-      const slug = $select.value;
-      const message = $input.value.trim();
-
-      if (!slug) { alert(t('console.ai.noSite')); return; }
-      if (!message) return;
-
-      // Add user message
-      const userMsg = document.createElement('div');
-      userMsg.className = 'ai-msg user';
-      userMsg.textContent = message;
-      $messages.appendChild(userMsg);
-      $messages.scrollTop = $messages.scrollHeight;
-
-      // Clear input
-      $input.value = '';
-      $input.style.height = 'auto';
-      aiStreaming = true;
-      $btn.disabled = true;
-      $btn.textContent = t('console.ai.sending');
-
-      // Create assistant message placeholder
-      const assistantMsg = document.createElement('div');
-      assistantMsg.className = 'ai-msg assistant';
-      assistantMsg.textContent = '';
-      $messages.appendChild(assistantMsg);
-
-      const lmuToken = getLmuToken();
-
-      try {
-        const resp = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/ai-edit', {
-          method: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + lmuToken,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ message }),
-        });
-
-        if (!resp.ok) {
-          const err = await resp.json();
-          assistantMsg.textContent = err.error || 'Error';
-          assistantMsg.style.color = 'var(--red)';
-          aiStreaming = false;
-          $btn.disabled = false;
-          $btn.textContent = t('console.ai.send');
-          updateAiSendButton();
-          return;
-        }
-
-        // Read SSE stream
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let assistantText = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop();
-
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const jsonStr = line.slice(6);
-            if (!jsonStr.trim()) continue;
-
-            try {
-              const event = JSON.parse(jsonStr);
-
-              if (event.type === 'assistant' && event.message) {
-                // Text content from assistant
-                const content = event.message.content;
-                if (Array.isArray(content)) {
-                  for (const block of content) {
-                    if (block.type === 'text') {
-                      assistantText += block.text;
-                      assistantMsg.textContent = assistantText;
-                    } else if (block.type === 'tool_use') {
-                      // Show tool usage as small indicator
-                      const toolMsg = document.createElement('div');
-                      toolMsg.className = 'ai-msg tool';
-                      toolMsg.textContent = '> ' + block.name + (block.input && block.input.file_path ? ': ' + block.input.file_path.split('/').pop() : '');
-                      $messages.insertBefore(toolMsg, assistantMsg);
-                    }
-                  }
-                }
-              } else if (event.type === 'result') {
-                // Final result
-                if (event.result) {
-                  assistantText = event.result;
-                  assistantMsg.textContent = assistantText;
-                }
-                if (event.session_id) {
-                  // Session stored server-side
-                }
-              } else if (event.type === 'done') {
-                if (event.remaining !== undefined) {
-                  aiQuotaRemaining = event.remaining;
-                  updateAiQuota();
-                }
-                // Show done indicator
-                const doneMsg = document.createElement('div');
-                doneMsg.className = 'ai-msg system';
-                doneMsg.textContent = t('console.ai.done');
-                $messages.appendChild(doneMsg);
-              } else if (event.type === 'error') {
-                assistantMsg.textContent = event.error || 'Error';
-                assistantMsg.style.color = 'var(--red)';
-              }
-
-              $messages.scrollTop = $messages.scrollHeight;
-            } catch { /* skip malformed */ }
-          }
-        }
-      } catch (err) {
-        assistantMsg.textContent = 'Connection error: ' + err.message;
-        assistantMsg.style.color = 'var(--red)';
-      } finally {
-        aiStreaming = false;
-        $btn.disabled = false;
-        $btn.textContent = t('console.ai.send');
-        updateAiSendButton();
-        $messages.scrollTop = $messages.scrollHeight;
-      }
-    }
-
-    function updateAiQuota() {
-      const $quota = document.getElementById('ai-quota');
-      if (aiQuotaRemaining !== null) {
-        $quota.textContent = t('console.ai.quota').replace('{remaining}', aiQuotaRemaining);
-      }
-    }
-
-    // ── Start ──
     init();
   </script>
 </body>

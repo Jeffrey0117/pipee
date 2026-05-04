@@ -1,19 +1,15 @@
 /**
  * Pipee User API
  *
- * Handles user-facing endpoints for the public deploy platform.
- * Auth via LetMeUse JWT tokens.
+ * Handles user registration, login, and site management.
+ * Auth via local JWT (username/password).
  */
 
 const fs = require('fs');
 const path = require('path');
 const db = require('./db');
-const { verifyUserRequest } = require('./user-auth');
-const { checkUserDeployRateLimit, checkUserApiRateLimit } = require('./rate-limit');
-
-const ROOT = path.join(__dirname, '../..');
-const STATIC_DIR = path.join(ROOT, 'data', 'static');
-const CONFIG_PATH = path.join(ROOT, 'config.json');
+const { hashPassword, verifyPassword, generateToken, verifyUserRequest } = require('./user-auth');
+const { validateSlug, STATIC_DIR } = require('./static');
 
 const MAX_ARCHIVE_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_EXTRACTED_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -21,15 +17,6 @@ const MAX_FILES_PER_SITE = 5000;
 
 // Forbidden file extensions
 const FORBIDDEN_EXTENSIONS = new Set(['.exe', '.dll', '.bat', '.ps1', '.cmd', '.com', '.scr', '.msi']);
-
-function getStaticDomain() {
-  try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-    return config.staticDomain || 'pipee.tw';
-  } catch {
-    return 'pipee.tw';
-  }
-}
 
 // ── JSON helpers ──
 
@@ -62,14 +49,11 @@ function collectBody(req, maxBytes) {
   });
 }
 
-// ── Archive extraction (ZIP + tar.gz) ──
+// ── Archive extraction (ZIP only for standalone) ──
 
 function detectArchiveType(buffer) {
   if (buffer.length < 2) return null;
-  // ZIP: PK (0x50 0x4B)
   if (buffer[0] === 0x50 && buffer[1] === 0x4B) return 'zip';
-  // gzip: 0x1F 0x8B
-  if (buffer[0] === 0x1F && buffer[1] === 0x8B) return 'gzip';
   return null;
 }
 
@@ -89,11 +73,9 @@ async function extractZip(buffer, destDir) {
     if (entry.isDirectory) continue;
 
     const entryPath = entry.entryName;
-    // Block path traversal
     const resolved = path.resolve(destDir, entryPath);
     if (!resolved.startsWith(normalizedDest)) continue;
 
-    // Block forbidden extensions
     const ext = path.extname(entryPath).toLowerCase();
     if (FORBIDDEN_EXTENSIONS.has(ext)) {
       throw new Error(`FORBIDDEN_FILE:${ext}`);
@@ -117,42 +99,6 @@ async function extractZip(buffer, destDir) {
   return totalSize;
 }
 
-async function extractTarGz(buffer, destDir) {
-  const tar = require('tar');
-  const { pipeline } = require('stream/promises');
-  const { Readable } = require('stream');
-
-  fs.mkdirSync(destDir, { recursive: true });
-
-  let fileCount = 0;
-
-  await pipeline(
-    Readable.from(buffer),
-    tar.x({
-      cwd: destDir,
-      strip: 0,
-      preserveOwner: false,
-      noChmod: true,
-      filter: (entryPath, entry) => {
-        // Block symlinks
-        if (entry.type === 'SymbolicLink' || entry.type === 'Link') return false;
-        // Block path traversal
-        const resolved = path.resolve(destDir, entryPath);
-        if (!resolved.startsWith(path.resolve(destDir))) return false;
-        // Block forbidden extensions
-        const ext = path.extname(entryPath).toLowerCase();
-        if (FORBIDDEN_EXTENSIONS.has(ext)) return false;
-
-        fileCount++;
-        if (fileCount > MAX_FILES_PER_SITE) return false;
-        return true;
-      },
-    })
-  );
-
-  return getDirSize(destDir);
-}
-
 function getDirSize(dir) {
   let size = 0;
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -167,7 +113,7 @@ function getDirSize(dir) {
   return size;
 }
 
-// ── Directory swap (reuse logic from static.js) ──
+// ── Directory swap ──
 
 function swapDirectory(slug, tempDir) {
   const targetDir = path.join(STATIC_DIR, slug);
@@ -195,73 +141,69 @@ function swapDirectory(slug, tempDir) {
 
 // ── URL helper ──
 
-function getSiteUrl(req, slug, domain) {
+function getSiteUrl(req, slug, config) {
   const host = req.headers.host || '';
   const hostname = host.split(':')[0];
   const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
   if (isLocal) return `http://${host}/_sites/${slug}/`;
-  return `https://${slug}.${domain}`;
+  return `https://${slug}.${config.domain}`;
 }
-
-// ── Slug validation (import from static.js) ──
-
-const { validateSlug } = require('./static');
-
-// ── AI Edit constants ──
-
-const AI_EDIT_QUOTA = 100; // per month for Creator plan
-const AI_SYSTEM_PROMPT = `你是網站編輯助手。你只能修改當前工作目錄中的檔案（HTML、CSS、JavaScript）。
-規則：
-- 只能讀取和修改當前目錄及子目錄中的檔案
-- 不能建立超出網站範圍的檔案
-- 修改後網站會即時生效
-- 用繁體中文回覆使用者
-- 簡潔回覆，說明你做了什麼改動`;
 
 // ── Route handler ──
 
-async function handle(req, res, pathname) {
-  // POST /api/auth/login
-  if (req.method === 'POST' && pathname === '/api/auth/login') {
-    return handleLogin(req, res);
+async function handle(req, res, pathname, config) {
+  // POST /api/auth/register
+  if (req.method === 'POST' && pathname === '/api/auth/register') {
+    return handleRegister(req, res, config);
   }
 
-  // GET /api/auth/me
-  if (req.method === 'GET' && pathname === '/api/auth/me') {
-    return handleMe(req, res);
+  // POST /api/auth/login
+  if (req.method === 'POST' && pathname === '/api/auth/login') {
+    return handleLogin(req, res, config);
+  }
+
+  // GET /api/user/me
+  if (req.method === 'GET' && pathname === '/api/user/me') {
+    return handleMe(req, res, config);
   }
 
   // GET /api/user/sites
   if (req.method === 'GET' && pathname === '/api/user/sites') {
-    return handleUserSites(req, res);
+    return handleUserSites(req, res, config);
   }
 
-  // POST /api/user/deploy?slug=xxx
-  if (req.method === 'POST' && pathname === '/api/user/deploy') {
-    return handleUserDeploy(req, res);
+  // POST /api/user/sites
+  if (req.method === 'POST' && pathname === '/api/user/sites') {
+    return handleCreateSite(req, res, config);
   }
 
-  // POST /api/user/sites/:slug/ai-edit
-  const aiEditMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/ai-edit$/);
-  if (req.method === 'POST' && aiEditMatch) {
-    return handleAiEdit(req, res, aiEditMatch[1]);
+  // POST /api/user/sites/:slug/deploy
+  const deployMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/deploy$/);
+  if (req.method === 'POST' && deployMatch) {
+    return handleDeploy(req, res, deployMatch[1], config);
+  }
+
+  // PUT /api/user/sites/:slug/settings
+  const settingsMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/settings$/);
+  if (req.method === 'PUT' && settingsMatch) {
+    return handleUpdateSettings(req, res, settingsMatch[1], config);
   }
 
   // DELETE /api/user/sites/:slug
   if (req.method === 'DELETE' && pathname.startsWith('/api/user/sites/')) {
     const slug = pathname.slice('/api/user/sites/'.length);
-    return handleUserDeleteSite(req, res, slug);
+    return handleDeleteSite(req, res, slug, config);
   }
 
   return jsonErr(res, 'Not found', 'NOT_FOUND', 404);
 }
 
-// ── POST /api/auth/login ──
+// ── POST /api/auth/register ──
 
-async function handleLogin(req, res) {
+async function handleRegister(req, res, config) {
   let body;
   try {
-    body = await collectBody(req, 8192);
+    body = await collectBody(req, 4096);
   } catch {
     return jsonErr(res, 'Failed to read body', 'BAD_REQUEST', 400);
   }
@@ -273,47 +215,105 @@ async function handleLogin(req, res) {
     return jsonErr(res, 'Invalid JSON', 'BAD_REQUEST', 400);
   }
 
-  if (!data.token) {
-    return jsonErr(res, 'token is required', 'BAD_REQUEST', 400);
+  if (!data.username || typeof data.username !== 'string' || data.username.trim().length < 3) {
+    return jsonErr(res, 'Username must be at least 3 characters', 'BAD_REQUEST', 400);
+  }
+  if (!data.password || typeof data.password !== 'string' || data.password.length < 6) {
+    return jsonErr(res, 'Password must be at least 6 characters', 'BAD_REQUEST', 400);
   }
 
-  const { decodeLetmeuseToken, resolveOrCreateUser } = require('./user-auth');
-  const payload = decodeLetmeuseToken(data.token);
-  if (!payload) {
-    return jsonErr(res, 'Invalid token', 'INVALID_TOKEN', 401);
+  const username = data.username.trim().toLowerCase();
+
+  if (!/^[a-z0-9_-]+$/.test(username)) {
+    return jsonErr(res, 'Username can only contain lowercase letters, numbers, hyphens, and underscores', 'BAD_REQUEST', 400);
   }
 
-  const user = resolveOrCreateUser(payload);
+  // Check if username already exists
+  const existing = db.getUserByUsername(username);
+  if (existing) {
+    return jsonErr(res, 'Username already taken', 'CONFLICT', 409);
+  }
+
+  const { hash, salt } = hashPassword(data.password);
+
+  let user;
+  try {
+    user = db.createUser({ username, passwordHash: hash, salt });
+  } catch (err) {
+    // Race condition: username was taken between check and insert
+    if (err.message && err.message.includes('UNIQUE')) {
+      return jsonErr(res, 'Username already taken', 'CONFLICT', 409);
+    }
+    throw err;
+  }
+
+  const token = generateToken(user.id, config.jwtSecret);
 
   return jsonOk(res, {
+    token,
     user: {
       id: user.id,
-      email: user.email,
-      name: user.name,
+      username: user.username,
       plan: user.plan,
       max_sites: user.max_sites,
     },
-    deployToken: user.deploy_token,
+  }, 201);
+}
+
+// ── POST /api/auth/login ──
+
+async function handleLogin(req, res, config) {
+  let body;
+  try {
+    body = await collectBody(req, 4096);
+  } catch {
+    return jsonErr(res, 'Failed to read body', 'BAD_REQUEST', 400);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(body.toString('utf8'));
+  } catch {
+    return jsonErr(res, 'Invalid JSON', 'BAD_REQUEST', 400);
+  }
+
+  if (!data.username || !data.password) {
+    return jsonErr(res, 'Username and password are required', 'BAD_REQUEST', 400);
+  }
+
+  const username = data.username.trim().toLowerCase();
+  const user = db.getUserByUsername(username);
+
+  if (!user || !verifyPassword(data.password, user.password_hash, user.salt)) {
+    return jsonErr(res, 'Invalid username or password', 'UNAUTHORIZED', 401);
+  }
+
+  const token = generateToken(user.id, config.jwtSecret);
+
+  return jsonOk(res, {
+    token,
+    user: {
+      id: user.id,
+      username: user.username,
+      plan: user.plan,
+      max_sites: user.max_sites,
+    },
   });
 }
 
-// ── GET /api/auth/me ──
+// ── GET /api/user/me ──
 
-function handleMe(req, res) {
-  const result = verifyUserRequest(req);
+function handleMe(req, res, config) {
+  const result = verifyUserRequest(req, config);
   if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
 
   const { user } = result;
-  const apiBlocked = checkUserApiRateLimit(user.id);
-  if (apiBlocked) return jsonErr(res, 'Too many requests', 'RATE_LIMITED', 429);
-
-  const siteCount = db.countSitesByToken(user.deploy_token);
+  const siteCount = db.countSitesByUser(user.id);
 
   return jsonOk(res, {
     user: {
       id: user.id,
-      email: user.email,
-      name: user.name,
+      username: user.username,
       plan: user.plan,
       max_sites: user.max_sites,
       site_count: siteCount,
@@ -323,19 +323,16 @@ function handleMe(req, res) {
 
 // ── GET /api/user/sites ──
 
-function handleUserSites(req, res) {
-  const result = verifyUserRequest(req);
+function handleUserSites(req, res, config) {
+  const result = verifyUserRequest(req, config);
   if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
 
   const { user } = result;
-  const apiBlocked = checkUserApiRateLimit(user.id);
-  if (apiBlocked) return jsonErr(res, 'Too many requests', 'RATE_LIMITED', 429);
-
-  const domain = getStaticDomain();
-  const sites = db.listStaticSites(user.deploy_token).map(s => ({
+  const sites = db.listSitesByUser(user.id).map(s => ({
     slug: s.slug,
-    url: getSiteUrl(req, s.slug, domain),
+    url: getSiteUrl(req, s.slug, config),
     size: s.size,
+    config: JSON.parse(s.config || '{}'),
     created_at: s.created_at,
     updated_at: s.updated_at,
   }));
@@ -346,39 +343,70 @@ function handleUserSites(req, res) {
   });
 }
 
-// ── POST /api/user/deploy?slug=xxx ──
+// ── POST /api/user/sites ──
 
-async function handleUserDeploy(req, res) {
-  const result = verifyUserRequest(req);
+async function handleCreateSite(req, res, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  let body;
+  try {
+    body = await collectBody(req, 4096);
+  } catch {
+    return jsonErr(res, 'Failed to read body', 'BAD_REQUEST', 400);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(body.toString('utf8'));
+  } catch {
+    return jsonErr(res, 'Invalid JSON', 'BAD_REQUEST', 400);
+  }
+
+  const slug = (data.slug || '').trim().toLowerCase();
+  const slugError = validateSlug(slug);
+  if (slugError) return jsonErr(res, slugError, 'INVALID_SLUG', 400);
+
+  const { user } = result;
+
+  // Check if slug already exists
+  const existing = db.getSite(slug);
+  if (existing) {
+    return jsonErr(res, 'This slug is already taken', 'SLUG_TAKEN', 409);
+  }
+
+  // Quota check
+  const count = db.countSitesByUser(user.id);
+  if (count >= user.max_sites) {
+    return jsonErr(res, `Site limit reached (${user.max_sites}). Delete a site first.`, 'QUOTA_EXCEEDED', 402);
+  }
+
+  const site = db.createSite({ slug, userId: user.id });
+
+  // Create the directory
+  const siteDir = path.join(STATIC_DIR, slug);
+  if (!fs.existsSync(siteDir)) {
+    fs.mkdirSync(siteDir, { recursive: true });
+  }
+
+  return jsonOk(res, {
+    slug: site.slug,
+    url: getSiteUrl(req, slug, config),
+  }, 201);
+}
+
+// ── POST /api/user/sites/:slug/deploy ──
+
+async function handleDeploy(req, res, slug, config) {
+  const result = verifyUserRequest(req, config);
   if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
 
   const { user } = result;
 
-  // Per-user rate limit
-  const blocked = checkUserDeployRateLimit(user.id);
-  if (blocked) {
-    return jsonErr(res, 'Too many deploys. Try again later.', 'RATE_LIMITED', 429);
-  }
-
-  // Parse slug
-  const url = new URL(req.url, 'http://localhost');
-  const slug = url.searchParams.get('slug');
-  const slugError = validateSlug(slug);
-  if (slugError) return jsonErr(res, slugError, 'INVALID_SLUG', 400);
-
   // Ownership check
-  const existingSite = db.getStaticSite(slug);
-  if (existingSite && existingSite.token !== user.deploy_token) {
-    return jsonErr(res, 'This slug is owned by another user', 'SLUG_TAKEN', 403);
-  }
-
-  // Quota check
-  if (!existingSite) {
-    const count = db.countSitesByToken(user.deploy_token);
-    if (count >= user.max_sites) {
-      return jsonErr(res, `Site limit reached (${user.max_sites}). Delete a site first.`, 'QUOTA_EXCEEDED', 402);
-    }
-  }
+  const site = db.getSite(slug);
+  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
+  if (site.user_id !== user.id) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
 
   // Collect body
   let body;
@@ -398,7 +426,7 @@ async function handleUserDeploy(req, res) {
   // Detect archive type
   const archiveType = detectArchiveType(body);
   if (!archiveType) {
-    return jsonErr(res, 'Unsupported format. Upload a ZIP or tar.gz file.', 'INVALID_FORMAT', 400);
+    return jsonErr(res, 'Unsupported format. Upload a ZIP file.', 'INVALID_FORMAT', 400);
   }
 
   // Extract to temp dir
@@ -406,11 +434,7 @@ async function handleUserDeploy(req, res) {
   let extractedSize;
 
   try {
-    if (archiveType === 'zip') {
-      extractedSize = await extractZip(body, tempDir);
-    } else {
-      extractedSize = await extractTarGz(body, tempDir);
-    }
+    extractedSize = await extractZip(body, tempDir);
   } catch (err) {
     try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
 
@@ -424,7 +448,6 @@ async function handleUserDeploy(req, res) {
       const ext = err.message.split(':')[1];
       return jsonErr(res, `${ext} files are not allowed`, 'FORBIDDEN_FILE', 400);
     }
-    console.error('[user-api] Extraction failed:', err.message);
     return jsonErr(res, 'Failed to extract archive', 'EXTRACTION_FAILED', 400);
   }
 
@@ -439,21 +462,13 @@ async function handleUserDeploy(req, res) {
     swapDirectory(slug, tempDir);
   } catch (err) {
     try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
-    console.error('[user-api] Swap failed:', err.message);
     return jsonErr(res, 'Failed to deploy site', 'DEPLOY_FAILED', 500);
   }
 
-  // Upsert DB
-  if (existingSite) {
-    db.updateStaticSite(slug, { size: extractedSize });
-  } else {
-    db.createStaticSite({ slug, token: user.deploy_token, size: extractedSize });
-  }
+  // Update DB
+  db.updateSite(slug, { size: extractedSize });
 
-  const domain = getStaticDomain();
-  const siteUrl = getSiteUrl(req, slug, domain);
-
-  console.error(`[user-api] Deployed ${slug} (${(extractedSize / 1024).toFixed(1)} KB) by user ${user.id.slice(0, 8)}...`);
+  const siteUrl = getSiteUrl(req, slug, config);
 
   return jsonOk(res, {
     url: siteUrl,
@@ -462,62 +477,21 @@ async function handleUserDeploy(req, res) {
   });
 }
 
-// ── DELETE /api/user/sites/:slug ──
+// ── PUT /api/user/sites/:slug/settings ──
 
-function handleUserDeleteSite(req, res, slug) {
-  const result = verifyUserRequest(req);
-  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
-
-  const { user } = result;
-  const site = db.getStaticSite(slug);
-  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
-  if (site.token !== user.deploy_token) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
-
-  // Delete files
-  const siteDir = path.join(STATIC_DIR, slug);
-  try { fs.rmSync(siteDir, { recursive: true, force: true }); } catch { /* ignore */ }
-
-  // Delete DB record
-  db.deleteStaticSite(slug);
-
-  return jsonOk(res, { deleted: true });
-}
-
-// ── POST /api/user/sites/:slug/ai-edit ──
-
-async function handleAiEdit(req, res, slug) {
-  const result = verifyUserRequest(req);
+async function handleUpdateSettings(req, res, slug, config) {
+  const result = verifyUserRequest(req, config);
   if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
 
   const { user } = result;
 
-  // Rate limit
-  const apiBlocked = checkUserApiRateLimit(user.id);
-  if (apiBlocked) return jsonErr(res, 'Too many requests', 'RATE_LIMITED', 429);
-
-  // Plan check: must be creator
-  if (user.plan !== 'creator') {
-    return jsonErr(res, 'Creator plan required for AI editing', 'PLAN_REQUIRED', 403);
-  }
-
-  // Ownership check
-  const site = db.getStaticSite(slug);
+  const site = db.getSite(slug);
   if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
-  if (site.token !== user.deploy_token) {
-    return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
-  }
+  if (site.user_id !== user.id) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
 
-  // Quota check
-  db.resetAiEditsIfNeeded(user.id);
-  const remaining = db.getAiEditsRemaining(user.id, AI_EDIT_QUOTA);
-  if (remaining <= 0) {
-    return jsonErr(res, 'Monthly AI edit quota exhausted (100/month)', 'QUOTA_EXCEEDED', 402);
-  }
-
-  // Parse body
   let body;
   try {
-    body = await collectBody(req, 16384);
+    body = await collectBody(req, 4096);
   } catch {
     return jsonErr(res, 'Failed to read body', 'BAD_REQUEST', 400);
   }
@@ -529,132 +503,34 @@ async function handleAiEdit(req, res, slug) {
     return jsonErr(res, 'Invalid JSON', 'BAD_REQUEST', 400);
   }
 
-  if (!data.message || typeof data.message !== 'string' || data.message.trim().length === 0) {
-    return jsonErr(res, 'message is required', 'BAD_REQUEST', 400);
-  }
+  // Merge settings into existing config
+  const existingConfig = JSON.parse(site.config || '{}');
+  const newConfig = { ...existingConfig, ...data };
 
+  db.updateSite(slug, { config: JSON.stringify(newConfig) });
+
+  return jsonOk(res, { slug, config: newConfig });
+}
+
+// ── DELETE /api/user/sites/:slug ──
+
+function handleDeleteSite(req, res, slug, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  const { user } = result;
+  const site = db.getSite(slug);
+  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
+  if (site.user_id !== user.id) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
+
+  // Delete files
   const siteDir = path.join(STATIC_DIR, slug);
-  if (!fs.existsSync(siteDir)) {
-    return jsonErr(res, 'Site directory not found', 'NOT_FOUND', 404);
-  }
+  try { fs.rmSync(siteDir, { recursive: true, force: true }); } catch { /* ignore */ }
 
-  // Get or create session
-  const aiSessions = require('./ai-sessions');
-  const existingSession = aiSessions.getSession(user.id, slug);
+  // Delete DB record
+  db.deleteSite(slug);
 
-  // Build Claude CLI args
-  const args = [
-    '--print',
-    '--output-format', 'stream-json',
-    '--model', 'claude-sonnet-4-5-20250514',
-    '--max-turns', '15',
-    '--allowedTools', 'Read,Write,Edit,Glob,Grep',
-    '--append-system-prompt', AI_SYSTEM_PROMPT,
-  ];
-
-  if (existingSession) {
-    args.push('--resume', existingSession);
-  }
-
-  // The user's message goes last
-  args.push(data.message);
-
-  // Set up SSE response
-  res.writeHead(200, {
-    'content-type': 'text/event-stream',
-    'cache-control': 'no-cache',
-    'connection': 'keep-alive',
-    'x-ai-edits-remaining': String(remaining - 1),
-  });
-
-  const { spawn } = require('child_process');
-
-  let claudeProcess;
-  try {
-    claudeProcess = spawn('claude', args, {
-      cwd: siteDir,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      shell: true,
-      env: { ...process.env, CLAUDE_CODE_ENTRYPOINT: 'pipee-ai-edit' },
-    });
-  } catch (err) {
-    res.write(`data: ${JSON.stringify({ type: 'error', error: 'Failed to start AI editor: ' + err.message })}\n\n`);
-    res.end();
-    return;
-  }
-
-  // Close stdin immediately (we pass message via args)
-  claudeProcess.stdin.end();
-
-  let sessionId = existingSession;
-  let buffer = '';
-
-  claudeProcess.stdout.on('data', (chunk) => {
-    buffer += chunk.toString();
-    const lines = buffer.split('\n');
-    buffer = lines.pop(); // keep incomplete line in buffer
-
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const event = JSON.parse(line);
-
-        // Extract session ID from result event
-        if (event.type === 'result' && event.session_id) {
-          sessionId = event.session_id;
-        }
-
-        // Forward to client
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-      } catch {
-        // Non-JSON line, skip
-      }
-    }
-  });
-
-  claudeProcess.stderr.on('data', (chunk) => {
-    const errText = chunk.toString().trim();
-    if (errText) {
-      res.write(`data: ${JSON.stringify({ type: 'system', message: errText })}\n\n`);
-    }
-  });
-
-  claudeProcess.on('close', (code) => {
-    // Process remaining buffer
-    if (buffer.trim()) {
-      try {
-        const event = JSON.parse(buffer);
-        if (event.type === 'result' && event.session_id) {
-          sessionId = event.session_id;
-        }
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-      } catch { /* ignore */ }
-    }
-
-    // Save session for continuity
-    if (sessionId) {
-      aiSessions.setSession(user.id, slug, sessionId);
-    }
-
-    // Increment quota
-    db.incrementAiEdits(user.id);
-
-    // Send done event
-    res.write(`data: ${JSON.stringify({ type: 'done', code, remaining: remaining - 1 })}\n\n`);
-    res.end();
-  });
-
-  claudeProcess.on('error', (err) => {
-    res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
-    res.end();
-  });
-
-  // Handle client disconnect
-  req.on('close', () => {
-    if (claudeProcess && !claudeProcess.killed) {
-      claudeProcess.kill('SIGTERM');
-    }
-  });
+  return jsonOk(res, { deleted: true });
 }
 
 module.exports = { handle };

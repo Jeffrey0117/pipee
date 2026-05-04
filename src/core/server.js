@@ -1,180 +1,159 @@
 /**
- * PIPEE - API Tunnel Service
- * 主程式入口
+ * Pipee Standalone HTTP Server
+ *
+ * Simple server for static site hosting.
+ * No PM2, Redis, gateway, tunnel, or external services.
  */
 
+const http = require('http');
+const fs = require('fs');
 const path = require('path');
-const ServiceRegistry = require('./registry');
-const deploy = require('./deploy');
-const gateway = require('./gateway');
-const telegram = require('./telegram');
-const heartbeat = require('./heartbeat');
-const scheduler = require('./scheduler');
-const tunnelWatchdog = require('./tunnel-watchdog');
-const tunnelTakeover = require('./tunnel-takeover');
-const tunnelElection = require('./tunnel-primary-election');
-const redis = require('./redis');
-const serviceHealthWatchdog = require('./service-health-watchdog');
-const postDeployObserver = require('./post-deploy-observer');
-const memoryWatchdog = require('./memory-watchdog');
-const cleanup = require('./cleanup');
+const { handleSite, MIME } = require('./static');
+const userApi = require('./user-api');
 
-// 專案根目錄
-const rootDir = path.join(__dirname, '..', '..');
+const ROOT = path.join(__dirname, '../..');
+const PUBLIC_DIR = path.join(ROOT, 'public');
 
-// 建立服務註冊中心
-const registry = new ServiceRegistry();
+// ── Load config ──
 
-// 載入設定
-const configPath = path.join(rootDir, 'config.json');
-registry.loadConfig(configPath);
+function loadConfig() {
+  const configPath = path.join(ROOT, 'config.json');
+  const examplePath = path.join(ROOT, 'config.example.json');
 
-console.log('');
-console.log('========================================');
-console.log('  Pipee - Local Deploy Gateway');
-console.log('========================================');
-console.log('');
-
-// 多機設定提示
-const _cfg = registry.config || {};
-if (!_cfg.machineId || !_cfg.redis?.url) {
-  console.log('⚠️  多機功能未設定！請在 config.json 加入：');
-  if (!_cfg.machineId) {
-    console.log('   "machineId": "my-pc"        ← 給這台電腦取個名字');
+  let config;
+  if (fs.existsSync(configPath)) {
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } else if (fs.existsSync(examplePath)) {
+    config = JSON.parse(fs.readFileSync(examplePath, 'utf8'));
+  } else {
+    config = {};
   }
-  if (!_cfg.redis?.url) {
-    console.log('   "redis": { "url": "rediss://...@xxx.upstash.io:6379" }');
+
+  return {
+    port: config.port || parseInt(process.env.PORT, 10) || 3939,
+    domain: config.domain || 'localhost',
+    jwtSecret: config.jwtSecret || 'change-this-to-a-random-string',
+    maxSites: config.maxSites || 10,
+    maxSiteSize: config.maxSiteSize || 52428800,
+  };
+}
+
+const config = loadConfig();
+
+// ── Serve public file ──
+
+function servePublicFile(res, filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const contentType = MIME[ext] || 'application/octet-stream';
+
+  if (fs.existsSync(filePath)) {
+    res.writeHead(200, { 'content-type': contentType });
+    return fs.createReadStream(filePath).pipe(res);
   }
-  console.log('   設定後重啟即可啟用心跳、同步、Bot 選舉等功能');
-  console.log('');
+
+  res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' });
+  return res.end('<h1>Not found</h1>');
 }
 
-// 掃描服務 (services/*.js)
-const servicesDir = path.join(rootDir, 'services');
-registry.scanServices(servicesDir);
+// ── Request handler ──
 
-// 啟動所有服務
-if (!registry.startAll()) {
-  console.log('    Drop a .js file in services/ directory');
-  process.exit(1);
-}
+async function handleRequest(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const pathname = url.pathname;
+  const host = req.headers.host || '';
+  const hostname = host.split(':')[0];
 
-// 啟動 Heartbeat（多機監控）
-heartbeat.startHeartbeat();
-
-// 啟動 GitHub 輪詢 + Redis sync（每 5 分鐘 GitHub / 每 30 秒 Redis）
-deploy.startPolling(5 * 60 * 1000);
-
-// 部署完成後重新載入 gateway tool cache
-deploy.events.on('deploy:complete', () => {
-  gateway.refreshTools().catch(err => {
-    console.error('[gateway] Failed to refresh after deploy:', err.message);
-  });
-});
-
-// 啟動 Telegram Bot（有 Redis → leader election / 沒有 → 看 config）
-const redisClient = redis.getSharedClient();
-const tgConfig = telegram.getConfig();
-if (redisClient && tgConfig.enabled) {
-  telegram.startWithLeaderElection();
-} else if (tgConfig.polling !== false) {
-  telegram.startBot();
-} else {
-  console.log('[Telegram] polling=false, notification-only mode');
-  telegram.startNotificationsOnly();
-}
-
-// Custom bots: optional loading from config
-const customBots = [];
-const botsConfig = Array.isArray(registry.config?.bots) ? registry.config.bots : [];
-for (const botCfg of botsConfig) {
-  if (botCfg.enabled && botCfg.botPath) {
-    try {
-      const bot = require(botCfg.botPath);
-      bot.startBot({ ...botCfg, telegramProxy: registry.config?.telegramProxy });
-      customBots.push(bot);
-    } catch (e) {
-      console.log(`[Bot:${botCfg.name || 'unknown'}] Not found, skipping:`, e.message);
+  // ── Subdomain-based site serving ──
+  // Check if request is for {slug}.{domain}
+  if (config.domain !== 'localhost' && hostname.endsWith('.' + config.domain)) {
+    const slug = hostname.slice(0, -(config.domain.length + 1));
+    if (slug && !slug.includes('.')) {
+      return handleSite(req, res, slug);
     }
   }
+
+  // ── Path-based site serving (for localhost development) ──
+  // /_sites/{slug}/path → serve site
+  if (pathname.startsWith('/_sites/')) {
+    const rest = pathname.slice('/_sites/'.length);
+    const slashIdx = rest.indexOf('/');
+    const slug = slashIdx === -1 ? rest : rest.slice(0, slashIdx);
+    if (slug) {
+      // Rewrite req.url to be the path within the site
+      const sitePath = slashIdx === -1 ? '/' : rest.slice(slashIdx);
+      req.url = sitePath;
+      return handleSite(req, res, slug);
+    }
+  }
+
+  // ── API routes ──
+  if (pathname.startsWith('/api/')) {
+    return userApi.handle(req, res, pathname, config);
+  }
+
+  // ── Console ──
+  if (pathname === '/console' || pathname === '/console/') {
+    return servePublicFile(res, path.join(PUBLIC_DIR, 'console.html'));
+  }
+
+  // ── Landing page ──
+  if (pathname === '/' || pathname === '') {
+    return servePublicFile(res, path.join(PUBLIC_DIR, 'index.html'));
+  }
+
+  // ── Static assets from public/ ──
+  if (req.method === 'GET') {
+    const filePath = path.resolve(PUBLIC_DIR, '.' + pathname);
+    const normalizedPublic = path.resolve(PUBLIC_DIR);
+
+    // Security: path traversal check
+    if (filePath.startsWith(normalizedPublic + path.sep) || filePath === normalizedPublic) {
+      if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+        return servePublicFile(res, filePath);
+      }
+    }
+  }
+
+  // ── 404 ──
+  res.writeHead(404, { 'content-type': 'application/json' });
+  return res.end(JSON.stringify({ error: 'Not found' }));
 }
 
-// 啟動 Scheduler（排程任務）
-scheduler.start();
+// ── Start server ──
 
-// 啟動 Tunnel Watchdog（每 2 分鐘檢查 tunnel 健康）
-tunnelWatchdog.start();
-
-// 啟動 Tunnel Primary Election（有 Redis → 自動 election / 沒有 → fallback config）
-tunnelElection.start();
-
-// 註冊 heartbeat 離線回呼 → 加速 tunnel failover
-heartbeat.onMachineOffline((offlineId) => {
-  tunnelElection.onMachineOffline(offlineId);
+const server = http.createServer(async (req, res) => {
+  try {
+    await handleRequest(req, res);
+  } catch (err) {
+    console.error('[pipee] Request error:', err);
+    if (!res.headersSent) {
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Internal server error' }));
+    }
+  }
 });
 
-// 啟動 Service Health Watchdog（每 2 分鐘探測 health endpoint）
-serviceHealthWatchdog.start();
-
-// 啟動 Post-Deploy Observer（deploy 後觀察 5 分鐘）
-postDeployObserver.start();
-
-// 啟動 Memory Watchdog（每 5 分鐘監控記憶體趨勢）
-memoryWatchdog.start();
-
-// 啟動 Periodic Cleanup（每 6 小時清理）
-cleanup.start();
-
-// Graceful shutdown
-const shutdown = async () => {
-  console.log('');
-  console.log('[*] Shutting down...');
-
-  try {
-    await heartbeat.stopHeartbeat();
-    deploy.stopPolling();
-    scheduler.stop();
-    tunnelWatchdog.stop();
-    serviceHealthWatchdog.stop();
-    postDeployObserver.stop();
-    memoryWatchdog.stop();
-    cleanup.stop();
-    await tunnelElection.stop();
-    telegram.stopBot();
-    for (const bot of customBots) bot.stopBot?.();
-
-    // 等待伺服器完全關閉（給 3 秒時間）
-    registry.stopAll();
-
-    await redis.shutdown();
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    console.log('[*] Shutdown complete');
-    process.exit(0);
-  } catch (err) {
-    console.error('[*] Shutdown error:', err);
-    process.exit(1);
+server.listen(config.port, () => {
+  console.log(`[pipee] Server running on http://localhost:${config.port}`);
+  console.log(`[pipee] Console: http://localhost:${config.port}/console`);
+  if (config.domain !== 'localhost') {
+    console.log(`[pipee] Sites served at: https://{slug}.${config.domain}`);
+  } else {
+    console.log(`[pipee] Sites served at: http://localhost:${config.port}/_sites/{slug}/`);
   }
-};
+});
+
+// ── Graceful shutdown ──
+
+function shutdown() {
+  console.log('\n[pipee] Shutting down...');
+  const db = require('./db');
+  db.close();
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 5000);
+}
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
-// Handle uncaught exceptions to prevent crash loops
-process.on('uncaughtException', (err) => {
-  console.error('[FATAL] Uncaught exception:', err);
-  // Don't exit immediately, let the process continue
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('[FATAL] Unhandled rejection at:', promise, 'reason:', reason);
-  // Don't exit immediately, let the process continue
-});
-
-console.log('----------------------------------------');
-console.log('Press Ctrl+C to stop all services');
-console.log('----------------------------------------');
-console.log('');
-
-// Export for external use
-module.exports = registry;
+module.exports = server;
