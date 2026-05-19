@@ -200,6 +200,16 @@
 
     .ai-files-changed { font-size: 0.72rem; color: var(--green); margin-top: 0.25rem; font-family: var(--mono); }
 
+    /* GitHub connection */
+    .github-badge { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 5px; background: rgba(52,211,153,0.1); color: var(--green); border: 1px solid rgba(52,211,153,0.2); margin-bottom: 0.5rem; }
+    .github-setup { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.5rem; line-height: 1.5; }
+    .btn-disconnect { padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: 1px solid rgba(248,113,113,0.2); background: transparent; color: var(--text-muted); font-family: var(--font); transition: all 0.2s; }
+    .btn-disconnect:hover { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.3); color: var(--red); }
+    .btn-github { padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text-dim); font-family: var(--font); transition: all 0.2s; }
+    .btn-github:hover { color: var(--text); border-color: var(--accent); }
+    .secret-text { font-family: var(--mono); font-size: 0.72rem; color: var(--text-muted); cursor: pointer; user-select: all; }
+    .secret-text:hover { color: var(--text); }
+
     .hidden { display: none !important; }
 
     @media (max-width: 600px) {
@@ -344,6 +354,18 @@
     'console.git.diff.close': { en: 'Close', zh: '關閉' },
     'console.git.loadMore': { en: 'Load more', zh: '載入更多' },
     'console.git.loading': { en: 'Loading...', zh: '載入中...' },
+    'console.github.connect': { en: 'Connect GitHub', zh: '連結 GitHub' },
+    'console.github.connected': { en: 'GitHub Connected', zh: '已連結 GitHub' },
+    'console.github.disconnect': { en: 'Disconnect', zh: '斷開連結' },
+    'console.github.disconnect.confirm': { en: 'Disconnect GitHub from "{slug}"? The webhook will stop working.', zh: '斷開 "{slug}" 的 GitHub 連結？Webhook 將停止運作。' },
+    'console.github.webhookUrl': { en: 'Webhook URL', zh: 'Webhook URL' },
+    'console.github.webhookSecret': { en: 'Secret', zh: 'Secret' },
+    'console.github.setup': { en: 'Go to GitHub repo Settings → Webhooks → Add webhook, paste the URL and Secret above, set Content type to application/json, select "Just the push event".', zh: '前往 GitHub repo Settings → Webhooks → Add webhook，貼上以上 URL 和 Secret，Content type 選 application/json，選擇 "Just the push event"。' },
+    'console.github.promptUrl': { en: 'GitHub repo URL (e.g. https://github.com/user/repo):', zh: 'GitHub repo URL（例如 https://github.com/user/repo）：' },
+    'console.github.promptBranch': { en: 'Branch (default: main):', zh: '分支（預設：main）：' },
+    'console.github.connecting': { en: 'Connecting...', zh: '連結中...' },
+    'console.github.connectFailed': { en: 'Failed to connect GitHub', zh: '連結 GitHub 失敗' },
+    'console.github.publicOnly': { en: 'Currently supports public repos only', zh: '目前僅支援公開 repo' },
     'time.justNow': { en: 'just now', zh: '剛剛' },
     'time.m': { en: 'm ago', zh: '分鐘前' },
     'time.h': { en: 'h ago', zh: '小時前' },
@@ -542,57 +564,155 @@
         // Git section
         var gitSection = document.createElement('div');
         gitSection.className = 'site-git';
-        var displayGitUrl = s.git_url || s.repo_url;
-        if (displayGitUrl) {
-          // Clone URL bar (prominent)
-          var cloneWrap = document.createElement('div');
-          cloneWrap.className = 'clone-url-wrap';
-          var cloneLabel = document.createElement('span');
-          cloneLabel.className = 'clone-url-label';
-          cloneLabel.textContent = t('console.git.cloneHint');
-          var cloneText = document.createElement('span');
-          cloneText.className = 'clone-url-text';
-          cloneText.textContent = displayGitUrl;
-          cloneText.title = displayGitUrl;
-          var copyBtn = document.createElement('button');
-          copyBtn.className = 'btn-copy';
-          copyBtn.textContent = 'Copy';
-          var repoUrlForCopy = displayGitUrl;
-          copyBtn.addEventListener('click', function() { copyCloneUrl(repoUrlForCopy, copyBtn); });
-          cloneText.addEventListener('click', function() { copyCloneUrl(repoUrlForCopy, copyBtn); });
-          cloneWrap.appendChild(cloneLabel);
-          cloneWrap.appendChild(cloneText);
-          cloneWrap.appendChild(copyBtn);
-          gitSection.appendChild(cloneWrap);
 
-          // Branch + commit info + deploy button
-          var gitInfo = document.createElement('div');
-          gitInfo.className = 'git-info';
-          var infoText = '';
-          if (s.branch) infoText += escapeHtml(s.branch);
-          if (s.last_commit) infoText += ' &mdash; <span class="git-commit">' + escapeHtml(s.last_commit.slice(0, 7)) + '</span>';
-          if (infoText) { gitInfo.innerHTML = infoText; gitSection.appendChild(gitInfo); }
-          var gitActions = document.createElement('div');
-          gitActions.className = 'git-actions';
-          var deployBtn = document.createElement('button');
-          deployBtn.className = 'btn-git btn-git-primary';
-          deployBtn.textContent = t('console.git.deploy');
-          deployBtn.addEventListener('click', function(e) { gitDeploy(s.slug, e); });
-          gitActions.appendChild(deployBtn);
-          gitSection.appendChild(gitActions);
+        if (s.deploy_method === 'github') {
+          // GitHub connected view
+          var badge = document.createElement('div');
+          badge.className = 'github-badge';
+          badge.textContent = t('console.github.connected');
+          gitSection.appendChild(badge);
+
+          // Repo URL info
+          var repoInfo = document.createElement('div');
+          repoInfo.className = 'git-info';
+          var repoInfoText = escapeHtml(s.repo_url || '');
+          if (s.branch) repoInfoText += ' &mdash; ' + escapeHtml(s.branch);
+          if (s.last_commit) repoInfoText += ' &mdash; <span class="git-commit">' + escapeHtml(s.last_commit.slice(0, 7)) + '</span>';
+          repoInfo.innerHTML = repoInfoText;
+          gitSection.appendChild(repoInfo);
+
+          // Webhook URL
+          var whUrlWrap = document.createElement('div');
+          whUrlWrap.className = 'clone-url-wrap';
+          var whUrlLabel = document.createElement('span');
+          whUrlLabel.className = 'clone-url-label';
+          whUrlLabel.textContent = t('console.github.webhookUrl');
+          var whUrlText = document.createElement('span');
+          whUrlText.className = 'clone-url-text';
+          var webhookUrl = s.github_webhook_url || '';
+          whUrlText.textContent = webhookUrl;
+          whUrlText.title = webhookUrl;
+          var whUrlCopy = document.createElement('button');
+          whUrlCopy.className = 'btn-copy';
+          whUrlCopy.textContent = 'Copy';
+          (function(url, btn) {
+            btn.addEventListener('click', function() { copyToClipboard(url, btn); });
+            whUrlText.addEventListener('click', function() { copyToClipboard(url, btn); });
+          })(webhookUrl, whUrlCopy);
+          whUrlWrap.appendChild(whUrlLabel);
+          whUrlWrap.appendChild(whUrlText);
+          whUrlWrap.appendChild(whUrlCopy);
+          gitSection.appendChild(whUrlWrap);
+
+          // Webhook Secret
+          var whSecWrap = document.createElement('div');
+          whSecWrap.className = 'clone-url-wrap';
+          var whSecLabel = document.createElement('span');
+          whSecLabel.className = 'clone-url-label';
+          whSecLabel.textContent = t('console.github.webhookSecret');
+          var whSecText = document.createElement('span');
+          whSecText.className = 'secret-text';
+          var secret = (s.config && s.config.githubWebhookSecret) || '';
+          whSecText.textContent = secret.slice(0, 8) + '...';
+          whSecText.title = 'Click to show full secret';
+          whSecText.addEventListener('click', function() {
+            whSecText.textContent = whSecText.textContent.includes('...') ? secret : secret.slice(0, 8) + '...';
+          });
+          var whSecCopy = document.createElement('button');
+          whSecCopy.className = 'btn-copy';
+          whSecCopy.textContent = 'Copy';
+          (function(sec, btn) {
+            btn.addEventListener('click', function() { copyToClipboard(sec, btn); });
+          })(secret, whSecCopy);
+          whSecWrap.appendChild(whSecLabel);
+          whSecWrap.appendChild(whSecText);
+          whSecWrap.appendChild(whSecCopy);
+          gitSection.appendChild(whSecWrap);
+
+          // Setup hint
+          var setupHint = document.createElement('div');
+          setupHint.className = 'github-setup';
+          setupHint.textContent = t('console.github.setup');
+          gitSection.appendChild(setupHint);
+
+          // Actions: Deploy + Disconnect
+          var ghActions = document.createElement('div');
+          ghActions.className = 'git-actions';
+          ghActions.style.marginTop = '0.5rem';
+          var ghDeployBtn = document.createElement('button');
+          ghDeployBtn.className = 'btn-git btn-git-primary';
+          ghDeployBtn.textContent = t('console.git.deploy');
+          ghDeployBtn.addEventListener('click', function(e) { gitDeploy(s.slug, e); });
+          var ghDisconnectBtn = document.createElement('button');
+          ghDisconnectBtn.className = 'btn-disconnect';
+          ghDisconnectBtn.textContent = t('console.github.disconnect');
+          (function(slug) {
+            ghDisconnectBtn.addEventListener('click', function() { disconnectGitHub(slug); });
+          })(s.slug);
+          ghActions.appendChild(ghDeployBtn);
+          ghActions.appendChild(ghDisconnectBtn);
+          gitSection.appendChild(ghActions);
+
         } else {
-          var noRepoText = document.createElement('div');
-          noRepoText.className = 'git-info';
-          noRepoText.textContent = t('console.git.noRepo');
-          gitSection.appendChild(noRepoText);
-          var gitActions = document.createElement('div');
-          gitActions.className = 'git-actions';
-          var linkBtn = document.createElement('button');
-          linkBtn.className = 'btn-git';
-          linkBtn.textContent = t('console.git.linkRepo');
-          linkBtn.addEventListener('click', function() { showLinkRepo(s.slug); });
-          gitActions.appendChild(linkBtn);
-          gitSection.appendChild(gitActions);
+          var displayGitUrl = s.git_url || s.repo_url;
+          if (displayGitUrl) {
+            // Clone URL bar (prominent)
+            var cloneWrap = document.createElement('div');
+            cloneWrap.className = 'clone-url-wrap';
+            var cloneLabel = document.createElement('span');
+            cloneLabel.className = 'clone-url-label';
+            cloneLabel.textContent = t('console.git.cloneHint');
+            var cloneText = document.createElement('span');
+            cloneText.className = 'clone-url-text';
+            cloneText.textContent = displayGitUrl;
+            cloneText.title = displayGitUrl;
+            var copyBtn = document.createElement('button');
+            copyBtn.className = 'btn-copy';
+            copyBtn.textContent = 'Copy';
+            var repoUrlForCopy = displayGitUrl;
+            copyBtn.addEventListener('click', function() { copyCloneUrl(repoUrlForCopy, copyBtn); });
+            cloneText.addEventListener('click', function() { copyCloneUrl(repoUrlForCopy, copyBtn); });
+            cloneWrap.appendChild(cloneLabel);
+            cloneWrap.appendChild(cloneText);
+            cloneWrap.appendChild(copyBtn);
+            gitSection.appendChild(cloneWrap);
+
+            // Branch + commit info + deploy button
+            var gitInfo = document.createElement('div');
+            gitInfo.className = 'git-info';
+            var infoText = '';
+            if (s.branch) infoText += escapeHtml(s.branch);
+            if (s.last_commit) infoText += ' &mdash; <span class="git-commit">' + escapeHtml(s.last_commit.slice(0, 7)) + '</span>';
+            if (infoText) { gitInfo.innerHTML = infoText; gitSection.appendChild(gitInfo); }
+            var gitActions = document.createElement('div');
+            gitActions.className = 'git-actions';
+            var deployBtn = document.createElement('button');
+            deployBtn.className = 'btn-git btn-git-primary';
+            deployBtn.textContent = t('console.git.deploy');
+            deployBtn.addEventListener('click', function(e) { gitDeploy(s.slug, e); });
+            gitActions.appendChild(deployBtn);
+            gitSection.appendChild(gitActions);
+          } else {
+            var noRepoText = document.createElement('div');
+            noRepoText.className = 'git-info';
+            noRepoText.textContent = t('console.git.noRepo');
+            gitSection.appendChild(noRepoText);
+            var gitActions2 = document.createElement('div');
+            gitActions2.className = 'git-actions';
+            var linkBtn = document.createElement('button');
+            linkBtn.className = 'btn-git';
+            linkBtn.textContent = t('console.git.linkRepo');
+            linkBtn.addEventListener('click', function() { showLinkRepo(s.slug); });
+            var ghBtn = document.createElement('button');
+            ghBtn.className = 'btn-github';
+            ghBtn.textContent = t('console.github.connect');
+            (function(slug) {
+              ghBtn.addEventListener('click', function() { showConnectGitHub(slug); });
+            })(s.slug);
+            gitActions2.appendChild(linkBtn);
+            gitActions2.appendChild(ghBtn);
+            gitSection.appendChild(gitActions2);
+          }
         }
         card.appendChild(gitSection);
 
@@ -709,6 +829,73 @@
           btn.disabled = false;
           btn.textContent = t('console.git.deploy');
         }
+      }
+    }
+
+    // ── GitHub Connect ──
+    function copyToClipboard(text, btn) {
+      navigator.clipboard.writeText(text).then(function() {
+        btn.textContent = t('console.git.copied');
+        btn.classList.add('copied');
+        setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+      }).catch(function() {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.textContent = t('console.git.copied');
+        btn.classList.add('copied');
+        setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+      });
+    }
+
+    async function showConnectGitHub(slug) {
+      var repoUrl = prompt(t('console.github.promptUrl'));
+      if (!repoUrl) return;
+
+      var branch = prompt(t('console.github.promptBranch'), 'main') || 'main';
+
+      try {
+        var res = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/link-github', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken,
+          },
+          body: JSON.stringify({ repo_url: repoUrl, branch: branch }),
+        });
+
+        var data = await res.json();
+        if (!res.ok) {
+          alert(data.error || t('console.github.connectFailed'));
+          return;
+        }
+
+        loadSites();
+      } catch (err) {
+        alert(t('console.github.connectFailed') + ': ' + err.message);
+      }
+    }
+
+    async function disconnectGitHub(slug) {
+      if (!confirm(t('console.github.disconnect.confirm').replace('{slug}', slug))) return;
+
+      try {
+        var res = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/link-github', {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+
+        if (res.ok) {
+          loadSites();
+        } else {
+          var data = await res.json();
+          alert(data.error || 'Failed to disconnect');
+        }
+      } catch (err) {
+        alert('Failed to disconnect: ' + err.message);
       }
     }
 

@@ -198,9 +198,9 @@ async function handle(req, res, pathname, config) {
   }
 
   // DELETE /api/user/sites/:slug
-  if (req.method === 'DELETE' && pathname.startsWith('/api/user/sites/')) {
-    const slug = pathname.slice('/api/user/sites/'.length);
-    return handleDeleteSite(req, res, slug, config);
+  const deleteSiteMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])$/);
+  if (req.method === 'DELETE' && deleteSiteMatch) {
+    return handleDeleteSite(req, res, deleteSiteMatch[1], config);
   }
 
   // POST /api/user/sites/:slug/link-repo
@@ -213,6 +213,12 @@ async function handle(req, res, pathname, config) {
   const gitDeployMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/git-deploy$/);
   if (req.method === 'POST' && gitDeployMatch) {
     return handleGitDeploy(req, res, gitDeployMatch[1], config);
+  }
+
+  // POST /api/webhook/github/:slug (GitHub push -> auto deploy)
+  const ghWebhookMatch = pathname.match(/^\/api\/webhook\/github\/([a-z0-9][a-z0-9-]*[a-z0-9])$/);
+  if (req.method === 'POST' && ghWebhookMatch) {
+    return handleGitHubWebhook(req, res, ghWebhookMatch[1], config);
   }
 
   // POST /api/webhook/:slug (Gitea push -> auto deploy)
@@ -255,6 +261,18 @@ async function handle(req, res, pathname, config) {
   const rollbackMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/rollback$/);
   if (req.method === 'POST' && rollbackMatch) {
     return handleRollback(req, res, rollbackMatch[1], config);
+  }
+
+  // POST /api/user/sites/:slug/link-github
+  const linkGitHubMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/link-github$/);
+  if (req.method === 'POST' && linkGitHubMatch) {
+    return handleLinkGitHub(req, res, linkGitHubMatch[1], config);
+  }
+
+  // DELETE /api/user/sites/:slug/link-github
+  const unlinkGitHubMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/link-github$/);
+  if (req.method === 'DELETE' && unlinkGitHubMatch) {
+    return handleUnlinkGitHub(req, res, unlinkGitHubMatch[1], config);
   }
 
   return jsonErr(res, 'Not found', 'NOT_FOUND', 404);
@@ -406,6 +424,7 @@ function handleUserSites(req, res, config) {
     branch: s.branch || null,
     last_commit: s.last_commit || null,
     deploy_method: s.deploy_method || 'upload',
+    github_webhook_url: (s.deploy_method === 'github') ? `${config.externalUrl}/api/webhook/github/${s.slug}` : null,
     created_at: s.created_at,
     updated_at: s.updated_at,
   }));
@@ -600,9 +619,10 @@ async function handleUpdateSettings(req, res, slug, config) {
     return jsonErr(res, 'Invalid JSON', 'BAD_REQUEST', 400);
   }
 
-  // Merge settings into existing config
+  // Merge settings into existing config (protect internal keys)
   const existingConfig = JSON.parse(site.config || '{}');
-  const newConfig = { ...existingConfig, ...data };
+  const { webhookSecret: _ws, githubWebhookSecret: _gws, ...safeData } = data;
+  const newConfig = { ...existingConfig, ...safeData };
 
   db.updateSite(slug, { config: JSON.stringify(newConfig) });
 
@@ -750,7 +770,9 @@ async function handleWebhookDeploy(req, res, slug, config) {
     const crypto = require('crypto');
     const signature = req.headers['x-gitea-signature'] || '';
     const expected = crypto.createHmac('sha256', siteConfig.webhookSecret).update(body).digest('hex');
-    if (signature !== expected) {
+    const sigBuf = Buffer.from(signature);
+    const expectedBuf = Buffer.from(expected);
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeCompare(sigBuf, expectedBuf)) {
       res.writeHead(401, { 'content-type': 'application/json' });
       return res.end(JSON.stringify({ error: 'Invalid signature' }));
     }
@@ -1048,6 +1070,174 @@ async function handleRollback(req, res, slug, config) {
     }
     console.error(`[pipee] Rollback failed for ${slug}@${sha}:`, err.message);
     return jsonErr(res, 'Rollback failed', 'ROLLBACK_FAILED', 500);
+  }
+}
+
+// ── POST /api/user/sites/:slug/link-github ──
+
+async function handleLinkGitHub(req, res, slug, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  const { user } = result;
+  const site = db.getSite(slug);
+  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
+  if (site.user_id !== user.id) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
+
+  let body;
+  try {
+    body = await collectBody(req, 4096);
+  } catch {
+    return jsonErr(res, 'Failed to read body', 'BAD_REQUEST', 400);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(body.toString('utf8'));
+  } catch {
+    return jsonErr(res, 'Invalid JSON', 'BAD_REQUEST', 400);
+  }
+
+  const repoUrl = (data.repo_url || '').trim();
+  const branch = (data.branch || 'main').trim();
+
+  if (!repoUrl) {
+    return jsonErr(res, 'repo_url is required', 'BAD_REQUEST', 400);
+  }
+
+  if (!repoUrl.startsWith('https://')) {
+    return jsonErr(res, 'Please provide an HTTPS repo URL', 'BAD_REQUEST', 400);
+  }
+
+  const crypto = require('crypto');
+  const webhookSecret = crypto.randomBytes(32).toString('hex');
+
+  const existingConfig = JSON.parse(site.config || '{}');
+  const newConfig = { ...existingConfig, githubWebhookSecret: webhookSecret };
+
+  const cloneUrl = repoUrl.endsWith('.git') ? repoUrl : repoUrl + '.git';
+
+  db.updateSite(slug, {
+    repo_url: cloneUrl,
+    branch,
+    deploy_method: 'github',
+    config: JSON.stringify(newConfig),
+  });
+
+  const webhookUrl = `${config.externalUrl}/api/webhook/github/${slug}`;
+
+  return jsonOk(res, {
+    slug,
+    repo_url: cloneUrl,
+    branch,
+    deploy_method: 'github',
+    webhook_url: webhookUrl,
+    webhook_secret: webhookSecret,
+  });
+}
+
+// ── DELETE /api/user/sites/:slug/link-github ──
+
+async function handleUnlinkGitHub(req, res, slug, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  const { user } = result;
+  const site = db.getSite(slug);
+  if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
+  if (site.user_id !== user.id) return jsonErr(res, 'Not your site', 'FORBIDDEN', 403);
+
+  const existingConfig = JSON.parse(site.config || '{}');
+  const { githubWebhookSecret: _removed, ...cleanConfig } = existingConfig;
+
+  db.updateSite(slug, {
+    repo_url: null,
+    branch: 'main',
+    deploy_method: 'upload',
+    config: JSON.stringify(cleanConfig),
+  });
+
+  return jsonOk(res, { slug, disconnected: true });
+}
+
+// ── POST /api/webhook/github/:slug (GitHub push -> auto deploy) ──
+
+async function handleGitHubWebhook(req, res, slug, config) {
+  const site = db.getSite(slug);
+  if (!site) {
+    res.writeHead(404, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Site not found' }));
+  }
+
+  if (site.deploy_method !== 'github') {
+    res.writeHead(400, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Site not configured for GitHub deploy' }));
+  }
+
+  const siteConfig = JSON.parse(site.config || '{}');
+  if (!siteConfig.githubWebhookSecret) {
+    res.writeHead(400, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'GitHub webhook not configured' }));
+  }
+
+  let body;
+  try {
+    body = await collectBody(req, 1024 * 1024);
+  } catch {
+    res.writeHead(400, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Failed to read body' }));
+  }
+
+  // Verify GitHub signature (x-hub-signature-256: sha256=<hex>)
+  const crypto = require('crypto');
+  const signature = req.headers['x-hub-signature-256'] || '';
+  const expected = 'sha256=' + crypto.createHmac('sha256', siteConfig.githubWebhookSecret).update(body).digest('hex');
+
+  const sigBuf = Buffer.from(signature);
+  const expectedBuf = Buffer.from(expected);
+  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeCompare(sigBuf, expectedBuf)) {
+    res.writeHead(401, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Invalid signature' }));
+  }
+
+  // Handle GitHub ping event (sent when webhook is first created)
+  const ghEvent = req.headers['x-github-event'] || '';
+  if (ghEvent === 'ping') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ success: true, message: 'pong' }));
+  }
+
+  if (ghEvent !== 'push') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ skipped: true, message: 'Not a push event' }));
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(body.toString('utf8'));
+  } catch {
+    res.writeHead(400, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Invalid JSON payload' }));
+  }
+
+  // Only deploy if push is to the configured branch
+  const ref = payload.ref || '';
+  const expectedRef = 'refs/heads/' + (site.branch || 'main');
+  if (ref !== expectedRef) {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ skipped: true, message: 'Push to different branch' }));
+  }
+
+  // Respond immediately, deploy in background
+  res.writeHead(200, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({ success: true, message: 'Deploy triggered' }));
+
+  try {
+    const { commit, size } = deployFromGit(slug, site.repo_url, site.branch || 'main');
+    db.updateSite(slug, { last_commit: commit, size });
+    console.log(`[github-webhook] Deployed ${slug} from GitHub (${commit.slice(0, 7)})`);
+  } catch (err) {
+    console.error(`[github-webhook] Deploy failed for ${slug}:`, err.message);
   }
 }
 
