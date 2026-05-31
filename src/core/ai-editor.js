@@ -23,9 +23,15 @@ function resolveClaudeCli() {
     const cmdPath = execSync('where claude.cmd', { encoding: 'utf-8', windowsHide: true })
       .trim().split('\n')[0].trim();
     const dir = path.dirname(cmdPath);
-    const cliJs = path.join(dir, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js');
+    const ccDir = path.join(dir, 'node_modules', '@anthropic-ai', 'claude-code');
+    // claude-code <= 1.x shipped cli.js (run via node); 2.x ships a native bin/claude.exe
+    const cliJs = path.join(ccDir, 'cli.js');
     if (fs.existsSync(cliJs)) {
       return { cmd: process.execPath, prefix: [cliJs] };
+    }
+    const binExe = path.join(ccDir, 'bin', 'claude.exe');
+    if (fs.existsSync(binExe)) {
+      return { cmd: binExe, prefix: [] };
     }
     return { cmd: 'claude', prefix: [] };
   } catch {
