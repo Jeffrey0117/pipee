@@ -10,8 +10,8 @@ const T = {
 
   // ── Index: Hero ──
   'hero.badge': { en: 'Open Source \u00B7 Self-Hosted', zh: '開源 \u00B7 自託管' },
-  'hero.title1': { en: 'Host your site.', zh: '託管你的網站。' },
-  'hero.title2': { en: 'Simple. Instant.', zh: '簡單。即時。' },
+  'hero.title1': { en: 'Host your site.', zh: '派比部署' },
+  'hero.title2': { en: 'Simple. Instant.', zh: '免費 · 即時' },
   'hero.sub': {
     en: 'Upload a ZIP, get a live static site. Self-hosted on your own machine.\nNo cloud bills. No vendor lock-in. Just deploy.',
     zh: '上傳一個 ZIP，即可取得靜態網站。自託管在你自己的機器上。\n不需雲端費用，不受供應商綁定，直接部署。'
