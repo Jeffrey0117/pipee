@@ -101,10 +101,22 @@ function migrateSubscriptionFields(db) {
   if (!columns.includes('sub_expires_at')) {
     db.exec("ALTER TABLE users ADD COLUMN sub_expires_at TEXT DEFAULT NULL");
   }
-  // Case-insensitive uniqueness for email (partial index ignores NULLs).
+  // Email ownership: an email only maps a subscription once verified.
+  if (!columns.includes('email_verified')) {
+    db.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.includes('email_verify_token')) {
+    db.exec("ALTER TABLE users ADD COLUMN email_verify_token TEXT DEFAULT NULL");
+  }
+  if (!columns.includes('email_verify_expires')) {
+    db.exec("ALTER TABLE users ADD COLUMN email_verify_expires TEXT DEFAULT NULL");
+  }
+  // Uniqueness is enforced only among *verified* emails, so an unverified
+  // pre-claim can't block the real owner from binding + verifying the address.
+  db.exec("DROP INDEX IF EXISTS idx_users_email");
   db.exec(
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email " +
-    "ON users(email COLLATE NOCASE) WHERE email IS NOT NULL"
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_verified " +
+    "ON users(email COLLATE NOCASE) WHERE email IS NOT NULL AND email_verified = 1"
   );
 }
 
@@ -162,6 +174,21 @@ function getUserByEmail(email) {
   return db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(email) || null;
 }
 
+// The single account that has verified ownership of this email (if any).
+function getVerifiedUserByEmail(email) {
+  if (!email) return null;
+  const db = getDb();
+  return db.prepare(
+    'SELECT * FROM users WHERE email = ? COLLATE NOCASE AND email_verified = 1'
+  ).get(email) || null;
+}
+
+function getUserByVerifyToken(tokenHash) {
+  if (!tokenHash) return null;
+  const db = getDb();
+  return db.prepare('SELECT * FROM users WHERE email_verify_token = ?').get(tokenHash) || null;
+}
+
 function createUser({ username, passwordHash, salt, token, email }) {
   const db = getDb();
   const result = db.prepare(
@@ -172,7 +199,7 @@ function createUser({ username, passwordHash, salt, token, email }) {
 
 function updateUser(id, fields) {
   const db = getDb();
-  const allowed = ['username', 'password_hash', 'salt', 'token', 'plan', 'max_sites', 'ai_edits_used', 'ai_edits_reset_at', 'email', 'sub_expires_at'];
+  const allowed = ['username', 'password_hash', 'salt', 'token', 'plan', 'max_sites', 'ai_edits_used', 'ai_edits_reset_at', 'email', 'sub_expires_at', 'email_verified', 'email_verify_token', 'email_verify_expires'];
   const sets = [];
   const values = [];
   for (const key of allowed) {
@@ -257,6 +284,8 @@ module.exports = {
   getUserByUsername,
   getUserByToken,
   getUserByEmail,
+  getVerifiedUserByEmail,
+  getUserByVerifyToken,
   createUser,
   updateUser,
 

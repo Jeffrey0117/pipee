@@ -18,5 +18,10 @@
       "pro": "",
       "creator": ""
     }
+  },
+  "mailer": {
+    "url": "",
+    "token": "",
+    "from": "Pipee <noreply@isnowfriend.com>"
   }
 }

@@ -54,6 +54,13 @@ function loadConfig() {
       // tier -> PAYUNi periodic-billing checkout URL
       checkout: (config.paygate && config.paygate.checkout) || {},
     },
+    mailer: {
+      // CloudPipe mailer service; empty url => dev fallback (verify link
+      // is returned in the API response instead of emailed).
+      url: (config.mailer && config.mailer.url) || '',
+      token: process.env.MAILER_TOKEN || (config.mailer && config.mailer.token) || '',
+      from: (config.mailer && config.mailer.from) || 'Pipee <noreply@isnowfriend.com>',
+    },
   };
 }
 

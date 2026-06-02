@@ -65,6 +65,68 @@ function effectivePlan(user) {
   return subscriptionActive(user) ? (user.plan || 'free') : 'free';
 }
 
+// ── Email verification ──
+// An email only maps a PayGate subscription after the owner clicks a link, so
+// nobody can pre-claim someone else's address to capture their payment.
+
+const VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+function hashToken(raw) {
+  return crypto.createHash('sha256').update(raw).digest('hex');
+}
+
+// Stores a fresh (unverified) email + verification token on the user and
+// emails the confirmation link. Returns { sent, verifyUrl } — verifyUrl is
+// provided whenever the email could not be sent (dev / self-hosted fallback)
+// so the account owner can still complete verification.
+async function sendVerificationEmail(userId, email, config) {
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  db.updateUser(userId, {
+    email,
+    email_verified: 0,
+    email_verify_token: hashToken(rawToken),
+    email_verify_expires: new Date(Date.now() + VERIFY_TOKEN_TTL_MS).toISOString(),
+  });
+
+  const base = String(config.externalUrl || '').replace(/\/$/, '');
+  const verifyUrl = `${base}/api/user/verify-email?token=${rawToken}`;
+
+  const mailer = config.mailer || {};
+  if (!mailer.url) return { sent: false, verifyUrl };
+
+  try {
+    const html =
+      '<p>Confirm this email to activate your Pipee subscription.</p>' +
+      `<p><a href="${verifyUrl}">Verify email</a></p>` +
+      '<p>This link expires in 24 hours. If you did not request it, ignore this email.</p>';
+    const resp = await fetch(String(mailer.url).replace(/\/$/, '') + '/api/send', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(mailer.token ? { authorization: 'Bearer ' + mailer.token } : {}),
+      },
+      body: JSON.stringify({ to: email, subject: 'Verify your Pipee email', html, from: mailer.from }),
+    });
+    return { sent: resp.ok, verifyUrl: resp.ok ? null : verifyUrl };
+  } catch {
+    return { sent: false, verifyUrl };
+  }
+}
+
+// Minimal styled HTML response for the email-clicked verification endpoint.
+function htmlPage(res, status, heading, message) {
+  res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' });
+  res.end(
+    '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>Pipee</title>' +
+    '<div style="font-family:system-ui,sans-serif;max-width:480px;margin:18vh auto;padding:2rem;text-align:center;color:#1a1a2e">' +
+    `<h1 style="font-size:1.3rem;margin:0 0 .6rem">${heading}</h1>` +
+    `<p style="color:#5a5a72;line-height:1.5;margin:0 0 1.5rem">${message}</p>` +
+    '<a href="/console" style="color:#7c3aed;font-weight:600;text-decoration:none">→ Go to Console</a>' +
+    '</div>'
+  );
+}
+
 // ── Body collection ──
 
 function collectBody(req, maxBytes) {
@@ -212,6 +274,11 @@ async function handle(req, res, pathname, config) {
     return handleSetEmail(req, res, config);
   }
 
+  // GET /api/user/verify-email?token=... (confirm email ownership via emailed link)
+  if (req.method === 'GET' && pathname === '/api/user/verify-email') {
+    return handleVerifyEmail(req, res, config);
+  }
+
   // POST /api/webhooks/paygate (PayGate subscription events)
   if (req.method === 'POST' && pathname === '/api/webhooks/paygate') {
     return handlePaygateWebhook(req, res, config);
@@ -350,14 +417,15 @@ async function handleRegister(req, res, config) {
     return jsonErr(res, 'Username can only contain lowercase letters, numbers, hyphens, and underscores', 'BAD_REQUEST', 400);
   }
 
-  // Optional billing email (used to map PayGate subscriptions)
+  // Optional billing email (used to map PayGate subscriptions). Stored
+  // unverified; a verification link is sent after the account is created.
   let email = null;
   if (data.email !== undefined && data.email !== null && String(data.email).trim() !== '') {
     email = normalizeEmail(data.email);
     if (!isValidEmail(email)) {
       return jsonErr(res, 'Invalid email address', 'BAD_REQUEST', 400);
     }
-    if (db.getUserByEmail(email)) {
+    if (db.getVerifiedUserByEmail(email)) {
       return jsonErr(res, 'Email already in use', 'CONFLICT', 409);
     }
   }
@@ -382,6 +450,11 @@ async function handleRegister(req, res, config) {
     throw err;
   }
 
+  // Best-effort: kick off email verification (never blocks registration).
+  if (email) {
+    try { await sendVerificationEmail(user.id, email, config); } catch { /* non-fatal */ }
+  }
+
   const token = generateToken(user.id, config.jwtSecret);
 
   return jsonOk(res, {
@@ -390,6 +463,7 @@ async function handleRegister(req, res, config) {
       id: user.id,
       username: user.username,
       email: user.email || null,
+      email_verified: false,
       plan: user.plan,
       max_sites: user.max_sites,
     },
@@ -432,6 +506,7 @@ async function handleLogin(req, res, config) {
       id: user.id,
       username: user.username,
       email: user.email || null,
+      email_verified: !!user.email_verified,
       plan: user.plan,
       max_sites: user.max_sites,
     },
@@ -456,6 +531,7 @@ function handleMe(req, res, config) {
       id: user.id,
       username: user.username,
       email: user.email || null,
+      email_verified: !!user.email_verified,
       plan: plan,
       plan_label: planConfig.label,
       max_sites: planConfig.maxSites,
@@ -512,21 +588,69 @@ async function handleSetEmail(req, res, config) {
     return jsonErr(res, 'Invalid email address', 'BAD_REQUEST', 400);
   }
 
-  const existing = db.getUserByEmail(email);
-  if (existing && existing.id !== user.id) {
+  // Conflict only against a *verified* holder — an unverified pre-claim by
+  // someone else must not block the real owner.
+  const verifiedHolder = db.getVerifiedUserByEmail(email);
+  if (verifiedHolder && verifiedHolder.id !== user.id) {
     return jsonErr(res, 'Email already in use', 'CONFLICT', 409);
   }
 
+  // Already verified on this account and unchanged: nothing to do.
+  if (email === (user.email || '') && user.email_verified) {
+    return jsonOk(res, { email, email_verified: true, verification_sent: false });
+  }
+
+  let sendResult;
   try {
-    db.updateUser(user.id, { email });
+    sendResult = await sendVerificationEmail(user.id, email, config);
+  } catch {
+    return jsonErr(res, 'Failed to start email verification', 'INTERNAL', 500);
+  }
+
+  return jsonOk(res, {
+    email,
+    email_verified: false,
+    verification_sent: sendResult.sent,
+    verify_url: sendResult.verifyUrl || undefined,
+  });
+}
+
+// ── GET /api/user/verify-email ──
+
+function handleVerifyEmail(req, res, config) {
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const raw = url.searchParams.get('token') || '';
+  if (!raw) {
+    return htmlPage(res, 400, 'Invalid link', 'This verification link is missing its token.');
+  }
+
+  const user = db.getUserByVerifyToken(hashToken(raw));
+  if (!user || !user.email) {
+    return htmlPage(res, 400, 'Link invalid', 'This verification link is invalid or has already been used.');
+  }
+  if (!user.email_verify_expires || Date.parse(user.email_verify_expires) < Date.now()) {
+    return htmlPage(res, 400, 'Link expired', 'This verification link has expired. Request a new one from the console.');
+  }
+
+  const holder = db.getVerifiedUserByEmail(user.email);
+  if (holder && holder.id !== user.id) {
+    return htmlPage(res, 409, 'Already verified', 'This email is already verified on another account.');
+  }
+
+  try {
+    db.updateUser(user.id, {
+      email_verified: 1,
+      email_verify_token: null,
+      email_verify_expires: null,
+    });
   } catch (err) {
     if (err.message && err.message.includes('UNIQUE')) {
-      return jsonErr(res, 'Email already in use', 'CONFLICT', 409);
+      return htmlPage(res, 409, 'Already verified', 'This email is already verified on another account.');
     }
     throw err;
   }
 
-  return jsonOk(res, { email });
+  return htmlPage(res, 200, 'Email verified', 'You can close this tab and continue your upgrade.');
 }
 
 // ── POST /api/webhooks/paygate ──
@@ -588,10 +712,12 @@ async function handlePaygateWebhook(req, res, config) {
   }
 
   const email = sub.email ? normalizeEmail(sub.email) : '';
-  const user = email ? db.getUserByEmail(email) : null;
+  // Only a *verified* owner of the email receives the plan, so a subscription
+  // can never be captured by an account that merely claimed the address.
+  const user = email ? db.getVerifiedUserByEmail(email) : null;
 
   // Acknowledge unmapped subscriptions so PayGate stops retrying; the user can
-  // claim the subscription later by setting this email on their account.
+  // claim the subscription later by verifying this email on their account.
   if (!user) {
     return jsonOk(res, { success: true, mapped: false });
   }

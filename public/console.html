@@ -328,15 +328,32 @@
       <div class="modal-sub"><span data-i18n="upgrade.to">Upgrade to</span> <span class="modal-tier" id="upgrade-tier-name">Pro</span></div>
       <div class="modal-price" id="upgrade-price"></div>
       <div class="modal-error hidden" id="upgrade-error"></div>
-      <div class="modal-field">
-        <label class="modal-label" for="upgrade-email" data-i18n="upgrade.emailLabel">Billing email</label>
-        <input type="email" class="modal-input" id="upgrade-email" placeholder="you@example.com" autocomplete="email">
-        <div class="modal-hint" data-i18n="upgrade.emailHint">Pay with this same email so we can match your subscription automatically.</div>
+
+      <!-- Step 1: email -->
+      <div id="upgrade-step-form">
+        <div class="modal-field">
+          <label class="modal-label" for="upgrade-email" data-i18n="upgrade.emailLabel">Billing email</label>
+          <input type="email" class="modal-input" id="upgrade-email" placeholder="you@example.com" autocomplete="email">
+          <div class="modal-hint" data-i18n="upgrade.emailHint">Pay with this same email so we can match your subscription automatically.</div>
+        </div>
+        <div class="modal-hint" data-i18n="upgrade.paidHint">After payment your plan upgrades automatically, usually within a minute.</div>
+        <div class="modal-actions">
+          <button class="modal-btn modal-btn-ghost" onclick="closeUpgrade()" data-i18n="upgrade.cancel">Cancel</button>
+          <button class="modal-btn modal-btn-primary" id="upgrade-proceed" onclick="proceedUpgrade()" data-i18n="upgrade.proceed">Continue to payment</button>
+        </div>
       </div>
-      <div class="modal-hint" data-i18n="upgrade.paidHint">After payment your plan upgrades automatically, usually within a minute.</div>
-      <div class="modal-actions">
-        <button class="modal-btn modal-btn-ghost" onclick="closeUpgrade()" data-i18n="upgrade.cancel">Cancel</button>
-        <button class="modal-btn modal-btn-primary" id="upgrade-proceed" onclick="proceedUpgrade()" data-i18n="upgrade.proceed">Continue to payment</button>
+
+      <!-- Step 2: verify email before checkout -->
+      <div id="upgrade-step-verify" class="hidden">
+        <div class="modal-hint" id="upgrade-verify-msg" style="margin-top:0"></div>
+        <div class="modal-hint hidden" id="upgrade-verify-link-wrap" style="margin-top:0.75rem">
+          <span data-i18n="upgrade.devLink">No mailer configured — open this link to verify:</span><br>
+          <a id="upgrade-verify-link" href="#" target="_blank" style="color:var(--accent);word-break:break-all"></a>
+        </div>
+        <div class="modal-actions">
+          <button class="modal-btn modal-btn-ghost" onclick="resendVerification()" id="upgrade-resend" data-i18n="upgrade.resend">Resend link</button>
+          <button class="modal-btn modal-btn-primary" onclick="recheckVerification()" id="upgrade-recheck" data-i18n="upgrade.verified">I've verified — continue</button>
+        </div>
       </div>
     </div>
   </div>
@@ -426,6 +443,12 @@
     'upgrade.emailTaken': { en: 'That email is already used by another account', zh: '該 Email 已被其他帳號使用' },
     'upgrade.emailFailed': { en: 'Could not save email, please try again', zh: '無法儲存 Email，請再試一次' },
     'upgrade.notConfigured': { en: 'Checkout for this plan is not available yet. Please contact support.', zh: '此方案的結帳連結尚未開放，請聯絡客服。' },
+    'upgrade.verifySent': { en: 'We sent a verification link to {email}. Click it, then continue.', zh: '我們寄了一封驗證信到 {email}，請點擊信中連結後再繼續。' },
+    'upgrade.verifyManual': { en: 'Verify {email} to continue. No mailer is set up, so use the link below.', zh: '請先驗證 {email} 才能繼續。尚未設定寄信服務，請用下方連結驗證。' },
+    'upgrade.devLink': { en: 'Open this link to verify:', zh: '開啟此連結進行驗證：' },
+    'upgrade.resend': { en: 'Resend link', zh: '重新寄送' },
+    'upgrade.verified': { en: "I've verified — continue", zh: '我已驗證，繼續' },
+    'upgrade.notYetVerified': { en: 'Not verified yet — check your inbox and click the link first.', zh: '尚未驗證——請先到信箱點擊驗證連結。' },
     'time.justNow': { en: 'just now', zh: '剛剛' },
     'time.m': { en: 'm ago', zh: '分鐘前' },
     'time.h': { en: 'h ago', zh: '小時前' },
@@ -622,16 +645,11 @@
       document.getElementById('upgrade-price').innerHTML =
         escapeHtml(PLAN_PRICE[tier] || '') + ' <small>' + escapeHtml(t('upgrade.perMonth')) + '</small>';
 
-      var $err = document.getElementById('upgrade-error');
-      $err.classList.add('hidden');
-      $err.textContent = '';
+      clearUpgradeError();
+      showFormStep();
 
       var $email = document.getElementById('upgrade-email');
       $email.value = (currentUser.email || '');
-
-      var $proceed = document.getElementById('upgrade-proceed');
-      $proceed.disabled = false;
-      $proceed.textContent = t('upgrade.proceed');
 
       document.getElementById('upgrade-modal').classList.remove('hidden');
       if (!$email.value) $email.focus();
@@ -641,56 +659,126 @@
       document.getElementById('upgrade-modal').classList.add('hidden');
     }
 
+    function clearUpgradeError() {
+      var $err = document.getElementById('upgrade-error');
+      $err.classList.add('hidden');
+      $err.textContent = '';
+    }
+
     function upgradeError(msg) {
       var $err = document.getElementById('upgrade-error');
       $err.textContent = msg;
       $err.classList.remove('hidden');
     }
 
+    function showFormStep() {
+      document.getElementById('upgrade-step-form').classList.remove('hidden');
+      document.getElementById('upgrade-step-verify').classList.add('hidden');
+      var $proceed = document.getElementById('upgrade-proceed');
+      $proceed.disabled = false;
+      $proceed.textContent = t('upgrade.proceed');
+    }
+
+    // Render the "verify your email before paying" step.
+    function showVerifyStep(email, sent, verifyUrl) {
+      document.getElementById('upgrade-step-form').classList.add('hidden');
+      document.getElementById('upgrade-step-verify').classList.remove('hidden');
+      var msg = (sent ? t('upgrade.verifySent') : t('upgrade.verifyManual')).replace('{email}', email);
+      document.getElementById('upgrade-verify-msg').textContent = msg;
+      var $wrap = document.getElementById('upgrade-verify-link-wrap');
+      var $link = document.getElementById('upgrade-verify-link');
+      if (verifyUrl) {
+        $link.href = verifyUrl;
+        $link.textContent = verifyUrl;
+        $wrap.classList.remove('hidden');
+      } else {
+        $wrap.classList.add('hidden');
+      }
+    }
+
     async function proceedUpgrade() {
       if (!upgradeTier) return;
       var $proceed = document.getElementById('upgrade-proceed');
-      var $err = document.getElementById('upgrade-error');
-      $err.classList.add('hidden');
+      clearUpgradeError();
 
       var email = document.getElementById('upgrade-email').value.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return upgradeError(t('upgrade.emailInvalid'));
       }
 
+      // Already verified on this account and unchanged: straight to checkout.
+      if (email === (currentUser.email || '') && currentUser.email_verified) {
+        return goToCheckout();
+      }
+
       $proceed.disabled = true;
       $proceed.textContent = t('upgrade.saving');
 
-      // Persist email if it changed, so the webhook can map the subscription.
-      if (email !== (currentUser.email || '')) {
-        try {
-          var resp = await fetch('/api/user/email', {
-            method: 'PUT',
-            headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email }),
-          });
-          if (!resp.ok) {
-            var data = await resp.json().catch(function () { return {}; });
-            $proceed.disabled = false;
-            $proceed.textContent = t('upgrade.proceed');
-            return upgradeError(data.code === 'CONFLICT' ? t('upgrade.emailTaken') : t('upgrade.emailFailed'));
-          }
-          currentUser.email = email;
-        } catch {
+      try {
+        var resp = await fetch('/api/user/email', {
+          method: 'PUT',
+          headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email }),
+        });
+        var data = await resp.json().catch(function () { return {}; });
+        if (!resp.ok) {
           $proceed.disabled = false;
           $proceed.textContent = t('upgrade.proceed');
-          return upgradeError(t('upgrade.emailFailed'));
+          return upgradeError(data.code === 'CONFLICT' ? t('upgrade.emailTaken') : t('upgrade.emailFailed'));
         }
-      }
-
-      // Make sure plans (and checkout URLs) are loaded, then redirect to PAYUNi.
-      await loadPlans();
-      var url = checkoutUrlFor(upgradeTier);
-      if (!url) {
+        currentUser.email = email;
+        currentUser.email_verified = !!data.email_verified;
+        if (currentUser.email_verified) {
+          return goToCheckout();
+        }
+        showVerifyStep(email, data.verification_sent, data.verify_url);
+      } catch {
         $proceed.disabled = false;
         $proceed.textContent = t('upgrade.proceed');
-        return upgradeError(t('upgrade.notConfigured'));
+        return upgradeError(t('upgrade.emailFailed'));
       }
+    }
+
+    // Re-check verification status, then proceed if it cleared.
+    async function recheckVerification() {
+      clearUpgradeError();
+      var $btn = document.getElementById('upgrade-recheck');
+      $btn.disabled = true;
+      try {
+        var resp = await fetch('/api/user/me', { headers: { 'Authorization': 'Bearer ' + authToken } });
+        if (resp.ok) {
+          var u = (await resp.json()).user;
+          currentUser.email = u.email;
+          currentUser.email_verified = !!u.email_verified;
+        }
+      } catch { /* fall through to the not-verified hint */ }
+      $btn.disabled = false;
+      if (currentUser.email_verified) return goToCheckout();
+      upgradeError(t('upgrade.notYetVerified'));
+    }
+
+    async function resendVerification() {
+      if (!currentUser.email) return;
+      clearUpgradeError();
+      var $btn = document.getElementById('upgrade-resend');
+      $btn.disabled = true;
+      try {
+        var resp = await fetch('/api/user/email', {
+          method: 'PUT',
+          headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: currentUser.email }),
+        });
+        var data = await resp.json().catch(function () { return {}; });
+        if (resp.ok) showVerifyStep(currentUser.email, data.verification_sent, data.verify_url);
+      } catch { /* ignore */ }
+      $btn.disabled = false;
+    }
+
+    // Load plans (for checkout URLs) and redirect to the PAYUNi checkout.
+    async function goToCheckout() {
+      await loadPlans();
+      var url = checkoutUrlFor(upgradeTier);
+      if (!url) return upgradeError(t('upgrade.notConfigured'));
       window.location.href = url;
     }
 
