@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const db = require('./db');
 const { hashPassword, verifyPassword, generateToken, verifyUserRequest } = require('./user-auth');
 const { validateSlug, STATIC_DIR } = require('./static');
@@ -36,6 +37,32 @@ function jsonOk(res, data, status = 200) {
 function jsonErr(res, error, code, status) {
   res.writeHead(status, { 'content-type': 'application/json' });
   return res.end(JSON.stringify({ error, code }));
+}
+
+// ── Email helpers ──
+
+// Pragmatic RFC-5321-ish check: one @, no spaces, a dot in the domain.
+function isValidEmail(email) {
+  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
+}
+
+function normalizeEmail(email) {
+  return String(email).trim().toLowerCase();
+}
+
+// True when the user currently holds an active paid subscription period.
+// A null expiry means the plan wasn't set by a time-bound subscription
+// (e.g. the admin promotion, or a manual grant) and stays in effect.
+function subscriptionActive(user) {
+  if (!user.sub_expires_at) return user.plan !== 'free';
+  return Date.parse(user.sub_expires_at) > Date.now();
+}
+
+// The plan whose entitlements actually apply right now. Falls back to free
+// once a paid period has lapsed, so a missed `expired` webhook can't leave a
+// user with elevated quotas indefinitely.
+function effectivePlan(user) {
+  return subscriptionActive(user) ? (user.plan || 'free') : 'free';
 }
 
 // ── Body collection ──
@@ -175,6 +202,21 @@ async function handle(req, res, pathname, config) {
     return handleMe(req, res, config);
   }
 
+  // GET /api/plans (public: tiers + checkout URLs for the pricing/upgrade UI)
+  if (req.method === 'GET' && pathname === '/api/plans') {
+    return handlePlans(req, res, config);
+  }
+
+  // PUT /api/user/email (set/update billing email for subscription mapping)
+  if (req.method === 'PUT' && pathname === '/api/user/email') {
+    return handleSetEmail(req, res, config);
+  }
+
+  // POST /api/webhooks/paygate (PayGate subscription events)
+  if (req.method === 'POST' && pathname === '/api/webhooks/paygate') {
+    return handlePaygateWebhook(req, res, config);
+  }
+
   // GET /api/user/sites
   if (req.method === 'GET' && pathname === '/api/user/sites') {
     return handleUserSites(req, res, config);
@@ -308,6 +350,18 @@ async function handleRegister(req, res, config) {
     return jsonErr(res, 'Username can only contain lowercase letters, numbers, hyphens, and underscores', 'BAD_REQUEST', 400);
   }
 
+  // Optional billing email (used to map PayGate subscriptions)
+  let email = null;
+  if (data.email !== undefined && data.email !== null && String(data.email).trim() !== '') {
+    email = normalizeEmail(data.email);
+    if (!isValidEmail(email)) {
+      return jsonErr(res, 'Invalid email address', 'BAD_REQUEST', 400);
+    }
+    if (db.getUserByEmail(email)) {
+      return jsonErr(res, 'Email already in use', 'CONFLICT', 409);
+    }
+  }
+
   // Check if username already exists
   const existing = db.getUserByUsername(username);
   if (existing) {
@@ -318,11 +372,12 @@ async function handleRegister(req, res, config) {
 
   let user;
   try {
-    user = db.createUser({ username, passwordHash: hash, salt });
+    user = db.createUser({ username, passwordHash: hash, salt, email });
   } catch (err) {
-    // Race condition: username was taken between check and insert
+    // Race condition: username or email was taken between check and insert
     if (err.message && err.message.includes('UNIQUE')) {
-      return jsonErr(res, 'Username already taken', 'CONFLICT', 409);
+      const taken = /email/i.test(err.message) ? 'Email already in use' : 'Username already taken';
+      return jsonErr(res, taken, 'CONFLICT', 409);
     }
     throw err;
   }
@@ -334,6 +389,7 @@ async function handleRegister(req, res, config) {
     user: {
       id: user.id,
       username: user.username,
+      email: user.email || null,
       plan: user.plan,
       max_sites: user.max_sites,
     },
@@ -375,6 +431,7 @@ async function handleLogin(req, res, config) {
     user: {
       id: user.id,
       username: user.username,
+      email: user.email || null,
       plan: user.plan,
       max_sites: user.max_sites,
     },
@@ -389,22 +446,187 @@ function handleMe(req, res, config) {
 
   const { user } = result;
   const siteCount = db.countSitesByUser(user.id);
-  const planConfig = PLANS[user.plan] || PLANS.free;
+  // Entitlements follow the effective plan so a lapsed subscription reverts
+  // to free even if the `expired` webhook never arrived.
+  const plan = effectivePlan(user);
+  const planConfig = PLANS[plan] || PLANS.free;
 
   return jsonOk(res, {
     user: {
       id: user.id,
       username: user.username,
-      plan: user.plan,
+      email: user.email || null,
+      plan: plan,
       plan_label: planConfig.label,
       max_sites: planConfig.maxSites,
       site_count: siteCount,
       ai_edits_used: user.ai_edits_used || 0,
       ai_edits_limit: planConfig.aiEditsPerMonth,
-      ai_enabled: AI_ALLOWED_PLANS.has(user.plan),
-      git_dashboard_enabled: GIT_DASHBOARD_PLANS.has(user.plan),
+      ai_enabled: AI_ALLOWED_PLANS.has(plan),
+      git_dashboard_enabled: GIT_DASHBOARD_PLANS.has(plan),
+      sub_expires_at: user.sub_expires_at || null,
+      sub_active: subscriptionActive(user),
     },
   });
+}
+
+// ── GET /api/plans ──
+// Public catalogue of tiers + PAYUNi checkout URLs (from config). The frontend
+// reads checkout_url from here so links can be changed without touching markup.
+
+function handlePlans(req, res, config) {
+  const checkout = (config.paygate && config.paygate.checkout) || {};
+  const plans = Object.keys(PLANS).map((tier) => ({
+    tier,
+    label: PLANS[tier].label,
+    max_sites: PLANS[tier].maxSites,
+    ai_edits: PLANS[tier].aiEditsPerMonth,
+    checkout_url: checkout[tier] || null,
+  }));
+  return jsonOk(res, { plans });
+}
+
+// ── PUT /api/user/email ──
+
+async function handleSetEmail(req, res, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+  const { user } = result;
+
+  let body;
+  try {
+    body = await collectBody(req, 4096);
+  } catch {
+    return jsonErr(res, 'Failed to read body', 'BAD_REQUEST', 400);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(body.toString('utf8'));
+  } catch {
+    return jsonErr(res, 'Invalid JSON', 'BAD_REQUEST', 400);
+  }
+
+  const email = normalizeEmail(data.email || '');
+  if (!isValidEmail(email)) {
+    return jsonErr(res, 'Invalid email address', 'BAD_REQUEST', 400);
+  }
+
+  const existing = db.getUserByEmail(email);
+  if (existing && existing.id !== user.id) {
+    return jsonErr(res, 'Email already in use', 'CONFLICT', 409);
+  }
+
+  try {
+    db.updateUser(user.id, { email });
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE')) {
+      return jsonErr(res, 'Email already in use', 'CONFLICT', 409);
+    }
+    throw err;
+  }
+
+  return jsonOk(res, { email });
+}
+
+// ── POST /api/webhooks/paygate ──
+// PayGate posts subscription lifecycle events. We verify the HMAC signature,
+// map the subscription to a local user by email, and adjust their plan.
+
+function verifyWebhookSignature(rawBuffer, signature, secret) {
+  if (!signature || typeof signature !== 'string' || !signature.startsWith('sha256=')) {
+    return false;
+  }
+  const provided = signature.slice(7);
+  const expected = crypto.createHmac('sha256', secret).update(rawBuffer).digest('hex');
+  if (provided.length !== expected.length) return false;
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(provided, 'hex'),
+      Buffer.from(expected, 'hex')
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function handlePaygateWebhook(req, res, config) {
+  const paygate = config.paygate || {};
+  const secret = paygate.webhookSecret;
+  if (!secret) {
+    return jsonErr(res, 'PayGate webhook not configured', 'NOT_CONFIGURED', 503);
+  }
+
+  let raw;
+  try {
+    raw = await collectBody(req, 64 * 1024);
+  } catch {
+    return jsonErr(res, 'Failed to read body', 'BAD_REQUEST', 400);
+  }
+
+  const signature = req.headers['x-webhook-signature'] || '';
+  if (!verifyWebhookSignature(raw, signature, secret)) {
+    return jsonErr(res, 'Invalid signature', 'UNAUTHORIZED', 401);
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(raw.toString('utf8'));
+  } catch {
+    return jsonErr(res, 'Invalid JSON', 'BAD_REQUEST', 400);
+  }
+
+  const event = payload.event || '';
+  const data = payload.data || {};
+  const sub = data.subscription || {};
+  const plan = data.plan || {};
+  const product = paygate.product || 'pipee';
+
+  // Ignore events for other products sharing this PayGate instance.
+  if (sub.product && sub.product !== product) {
+    return jsonOk(res, { success: true, ignored: 'product_mismatch' });
+  }
+
+  const email = sub.email ? normalizeEmail(sub.email) : '';
+  const user = email ? db.getUserByEmail(email) : null;
+
+  // Acknowledge unmapped subscriptions so PayGate stops retrying; the user can
+  // claim the subscription later by setting this email on their account.
+  if (!user) {
+    return jsonOk(res, { success: true, mapped: false });
+  }
+
+  if (event === 'subscription.activated') {
+    // Clamp tier to the known plan whitelist; unknown tier -> free.
+    const tier = PLANS[String(sub.tier || plan.tier || '').toLowerCase()]
+      ? String(sub.tier || plan.tier).toLowerCase()
+      : 'free';
+    const planConfig = PLANS[tier];
+    // Only persist a parseable ISO date, else leave expiry open (null).
+    const endDate = sub.end_date && !Number.isNaN(Date.parse(sub.end_date))
+      ? sub.end_date : null;
+    db.updateUser(user.id, {
+      plan: tier,
+      max_sites: planConfig.maxSites,
+      sub_expires_at: endDate,
+    });
+  } else if (event === 'subscription.expired' || event === 'subscription.cancelled') {
+    // Guard against stale / re-delivered events (webhooks are at-least-once):
+    // only revoke once the paid period has actually lapsed. A fresh `activated`
+    // carrying a future end_date therefore can't be wiped by an old `cancelled`,
+    // and a cancellation keeps access until the period it was paid through ends.
+    const stillPaid = user.sub_expires_at
+      && Date.parse(user.sub_expires_at) > Date.now();
+    if (!stillPaid) {
+      db.updateUser(user.id, {
+        plan: 'free',
+        max_sites: PLANS.free.maxSites,
+        sub_expires_at: null,
+      });
+    }
+  }
+
+  return jsonOk(res, { success: true });
 }
 
 // ── GET /api/user/sites ──
@@ -429,7 +651,7 @@ function handleUserSites(req, res, config) {
     updated_at: s.updated_at,
   }));
 
-  const planConfig = PLANS[user.plan] || PLANS.free;
+  const planConfig = PLANS[effectivePlan(user)] || PLANS.free;
 
   return jsonOk(res, {
     sites,
@@ -470,7 +692,7 @@ async function handleCreateSite(req, res, config) {
   }
 
   // Quota check (plan-based)
-  const planConfig = PLANS[user.plan] || PLANS.free;
+  const planConfig = PLANS[effectivePlan(user)] || PLANS.free;
   const count = db.countSitesByUser(user.id);
   if (count >= planConfig.maxSites) {
     return jsonErr(res, `Site limit reached (${planConfig.maxSites}). Upgrade your plan or delete a site.`, 'QUOTA_EXCEEDED', 402);
@@ -767,12 +989,11 @@ async function handleWebhookDeploy(req, res, slug, config) {
       return res.end(JSON.stringify({ error: 'Failed to read body' }));
     }
 
-    const crypto = require('crypto');
     const signature = req.headers['x-gitea-signature'] || '';
     const expected = crypto.createHmac('sha256', siteConfig.webhookSecret).update(body).digest('hex');
     const sigBuf = Buffer.from(signature);
     const expectedBuf = Buffer.from(expected);
-    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeCompare(sigBuf, expectedBuf)) {
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
       res.writeHead(401, { 'content-type': 'application/json' });
       return res.end(JSON.stringify({ error: 'Invalid signature' }));
     }
@@ -794,7 +1015,7 @@ async function handleWebhookDeploy(req, res, slug, config) {
 // ── AI Quota helpers ──
 
 function checkAiQuota(user) {
-  const planConfig = PLANS[user.plan] || PLANS.free;
+  const planConfig = PLANS[effectivePlan(user)] || PLANS.free;
   const limit = planConfig.aiEditsPerMonth;
   const now = new Date();
   const resetAt = user.ai_edits_reset_at ? new Date(user.ai_edits_reset_at) : null;
@@ -822,7 +1043,7 @@ async function handleAiChat(req, res, slug, config) {
   const { user } = result;
 
   // Plan check
-  if (!AI_ALLOWED_PLANS.has(user.plan)) {
+  if (!AI_ALLOWED_PLANS.has(effectivePlan(user))) {
     return jsonErr(res, 'AI Editor requires a Pro plan. Upgrade to unlock.', 'PLAN_REQUIRED', 403);
   }
 
@@ -945,7 +1166,7 @@ async function handleGetCommits(req, res, slug, config) {
 
   const { user } = result;
 
-  if (!GIT_DASHBOARD_PLANS.has(user.plan)) {
+  if (!GIT_DASHBOARD_PLANS.has(effectivePlan(user))) {
     return jsonErr(res, 'Git Dashboard requires a Pro plan. Upgrade to unlock.', 'PLAN_REQUIRED', 403);
   }
 
@@ -989,7 +1210,7 @@ async function handleGetCommitDiff(req, res, slug, sha, config) {
 
   const { user } = result;
 
-  if (!GIT_DASHBOARD_PLANS.has(user.plan)) {
+  if (!GIT_DASHBOARD_PLANS.has(effectivePlan(user))) {
     return jsonErr(res, 'Git Dashboard requires a Pro plan.', 'PLAN_REQUIRED', 403);
   }
 
@@ -1018,7 +1239,7 @@ async function handleRollback(req, res, slug, config) {
 
   const { user } = result;
 
-  if (!GIT_DASHBOARD_PLANS.has(user.plan)) {
+  if (!GIT_DASHBOARD_PLANS.has(effectivePlan(user))) {
     return jsonErr(res, 'Git Dashboard requires a Pro plan.', 'PLAN_REQUIRED', 403);
   }
 
@@ -1189,13 +1410,12 @@ async function handleGitHubWebhook(req, res, slug, config) {
   }
 
   // Verify GitHub signature (x-hub-signature-256: sha256=<hex>)
-  const crypto = require('crypto');
   const signature = req.headers['x-hub-signature-256'] || '';
   const expected = 'sha256=' + crypto.createHmac('sha256', siteConfig.githubWebhookSecret).update(body).digest('hex');
 
   const sigBuf = Buffer.from(signature);
   const expectedBuf = Buffer.from(expected);
-  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeCompare(sigBuf, expectedBuf)) {
+  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
     res.writeHead(401, { 'content-type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Invalid signature' }));
   }

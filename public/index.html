@@ -672,6 +672,25 @@
       transition: all 0.2s;
     }
     .top-nav-btn:hover { background: var(--cta-hover); }
+    .top-nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .nav-hamburger {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .nav-hamburger:hover { color: var(--text); border-color: var(--text-muted); }
 
     /* ===== LIGHT MODE OVERRIDES ===== */
     html.light .hero::before { opacity: 0.15; }
@@ -758,6 +777,45 @@
       .pricing-card.featured:hover { transform: none; }
       .step { flex-direction: column; gap: 0.5rem; }
       .step-num { font-size: 2rem; }
+
+      /* Mobile nav: collapse links into a dropdown, keep toggles + hamburger inline */
+      .top-nav { padding: 0.7rem 1.1rem; }
+      .nav-hamburger { display: flex; }
+      .top-nav-links {
+        position: absolute;
+        top: 100%;
+        right: 0.75rem;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.25rem;
+        min-width: 180px;
+        padding: 0.5rem;
+        background: var(--bg-nav);
+        backdrop-filter: blur(12px);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-8px);
+        transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+      }
+      .top-nav-links.open {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+      }
+      .top-nav-links a {
+        font-size: 0.9rem;
+        padding: 0.55rem 0.75rem;
+        border-radius: 8px;
+      }
+      .top-nav-links a:hover { background: rgba(124,58,237,0.1); }
+      .top-nav-links .top-nav-btn {
+        text-align: center;
+        margin-top: 0.25rem;
+        font-size: 0.9rem;
+      }
     }
     @media (max-width: 480px) {
       .stats { grid-template-columns: 1fr; }
@@ -779,14 +837,19 @@
   <!-- ===== NAVBAR ===== -->
   <nav class="top-nav">
     <a href="/" class="top-nav-brand">Pipee</a>
-    <div class="top-nav-links">
-      <a href="/console" data-i18n="nav.console">Console</a>
-      <a href="https://github.com/Jeffrey0117/pipee" target="_blank">GitHub</a>
-      <a href="/console" class="top-nav-btn" data-i18n="nav.getStarted">Get Started</a>
+    <div class="top-nav-actions">
+      <div class="top-nav-links" id="navLinks">
+        <a href="/console" data-i18n="nav.console">Console</a>
+        <a href="https://github.com/Jeffrey0117/pipee" target="_blank">GitHub</a>
+        <a href="/console" class="top-nav-btn" data-i18n="nav.getStarted">Get Started</a>
+      </div>
       <button class="lang-toggle" onclick="toggleLang()"><span class="lang-en">中</span><span class="lang-zh">EN</span></button>
       <button class="theme-toggle" onclick="toggleTheme()" data-i18n-title="theme.toggle" title="Toggle theme">
         <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
         <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      </button>
+      <button class="nav-hamburger" onclick="toggleNav(event)" aria-label="Menu" aria-expanded="false">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
       </button>
     </div>
   </nav>
@@ -947,7 +1010,7 @@
           <li><span class="check highlight">&#10003;</span> <span data-i18n="pricing.pro.f3">AI Editor (200/mo)</span></li>
           <li><span class="check">&#10003;</span> <span data-i18n="pricing.pro.f4">Priority support</span></li>
         </ul>
-        <a href="/console" class="btn btn-primary pricing-btn" data-i18n="pricing.pro.cta">Upgrade to Pro</a>
+        <a href="/console?upgrade=pro" class="btn btn-primary pricing-btn" data-i18n="pricing.pro.cta">Upgrade to Pro</a>
       </div>
       <div class="pricing-card">
         <div class="pricing-name creator-name" data-i18n="pricing.creator.name">Creator</div>
@@ -959,7 +1022,7 @@
           <li><span class="check highlight">&#10003;</span> <span data-i18n="pricing.creator.f3">Unlimited AI edits</span></li>
           <li><span class="check">&#10003;</span> <span data-i18n="pricing.creator.f4">Admin dashboard</span></li>
         </ul>
-        <a href="/console" class="btn btn-ghost pricing-btn" data-i18n="pricing.creator.cta">Go Creator</a>
+        <a href="/console?upgrade=creator" class="btn btn-ghost pricing-btn" data-i18n="pricing.creator.cta">Go Creator</a>
       </div>
     </div>
   </section>
@@ -1018,6 +1081,26 @@
       localStorage.setItem('pipee-theme',
         document.documentElement.classList.contains('light') ? 'light' : 'dark');
     }
+
+    function toggleNav(e) {
+      if (e) e.stopPropagation();
+      var links = document.getElementById('navLinks');
+      var btn = document.querySelector('.nav-hamburger');
+      var open = links.classList.toggle('open');
+      if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    // Close mobile nav when clicking a link or tapping outside
+    document.addEventListener('click', function (e) {
+      var links = document.getElementById('navLinks');
+      if (!links || !links.classList.contains('open')) return;
+      var hamburger = document.querySelector('.nav-hamburger');
+      if (links.contains(e.target) || (hamburger && hamburger.contains(e.target))) {
+        if (e.target.closest('a')) toggleNav();
+        return;
+      }
+      toggleNav();
+    });
   </script>
   <script src="/i18n.js"></script>
 

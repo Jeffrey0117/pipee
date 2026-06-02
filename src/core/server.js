@@ -45,6 +45,15 @@ function loadConfig() {
     maxSites: config.maxSites || 10,
     maxSiteSize: config.maxSiteSize || 52428800,
     gitea: config.gitea || {},
+    paygate: {
+      product: (config.paygate && config.paygate.product) || 'pipee',
+      url: (config.paygate && config.paygate.url) || 'https://paygate.isnowfriend.com',
+      // Prefer env var so the secret stays out of committed config.
+      webhookSecret: process.env.PAYGATE_WEBHOOK_SECRET
+        || (config.paygate && config.paygate.webhookSecret) || '',
+      // tier -> PAYUNi periodic-billing checkout URL
+      checkout: (config.paygate && config.paygate.checkout) || {},
+    },
   };
 }
 

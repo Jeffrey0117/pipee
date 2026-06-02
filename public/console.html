@@ -55,6 +55,31 @@
     .btn-sm-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
     .btn-sm-ghost:hover { color: var(--text); border-color: var(--text-muted); }
 
+    /* Upgrade button + modal */
+    .btn-upgrade { padding: 0.4rem 0.9rem; border-radius: 8px; font-family: var(--font); font-size: 0.8rem; font-weight: 700; cursor: pointer; border: none; background: linear-gradient(135deg, #7c3aed, #ec4899); color: #fff; transition: all 0.2s; }
+    .btn-upgrade:hover { filter: brightness(1.08); box-shadow: 0 0 20px rgba(124,58,237,0.4); }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 1rem; }
+    .modal-overlay.hidden { display: none; }
+    .modal-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 1.75rem; width: 100%; max-width: 420px; box-shadow: 0 24px 60px rgba(0,0,0,0.45); }
+    .modal-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.35rem; }
+    .modal-sub { font-size: 0.9rem; color: var(--text-dim); margin-bottom: 1rem; line-height: 1.5; }
+    .modal-tier { font-weight: 700; color: var(--accent); }
+    .modal-price { font-size: 1.7rem; font-weight: 800; margin-bottom: 1.1rem; }
+    .modal-price small { font-size: 0.85rem; font-weight: 500; color: var(--text-muted); }
+    .modal-field { margin-bottom: 0.5rem; }
+    .modal-label { display: block; font-size: 0.78rem; color: var(--text-dim); margin-bottom: 0.4rem; }
+    .modal-input { width: 100%; padding: 0.65rem 0.8rem; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: var(--font); font-size: 0.9rem; }
+    .modal-input:focus { outline: none; border-color: var(--accent); }
+    .modal-hint { font-size: 0.76rem; color: var(--text-muted); margin-top: 0.6rem; line-height: 1.5; }
+    .modal-error { font-size: 0.82rem; color: var(--red); margin-bottom: 0.6rem; }
+    .modal-actions { display: flex; gap: 0.6rem; margin-top: 1.4rem; }
+    .modal-btn { flex: 1; padding: 0.7rem; border-radius: 10px; font-family: var(--font); font-size: 0.9rem; font-weight: 700; cursor: pointer; border: none; transition: all 0.2s; }
+    .modal-btn-primary { background: var(--cta); color: #fff; }
+    .modal-btn-primary:hover { background: var(--cta-hover); }
+    .modal-btn-primary:disabled { opacity: 0.6; cursor: default; }
+    .modal-btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+    .modal-btn-ghost:hover { color: var(--text); border-color: var(--text-muted); }
+
     .main { max-width: 800px; margin: 0 auto; padding: 2.5rem 2rem 4rem; }
 
     /* Login */
@@ -234,6 +259,7 @@
     <a href="/" class="nav-brand">Pipee <span>Console</span></a>
     <div class="nav-right">
       <span class="nav-user" id="nav-user"></span>
+      <button class="btn-upgrade hidden" id="btn-upgrade" onclick="openUpgradeNav()" data-i18n="upgrade.navBtn">Upgrade</button>
       <button class="btn-sm btn-sm-ghost hidden" id="btn-logout" onclick="doLogout()" data-i18n="console.logout">Logout</button>
       <button class="lang-toggle" onclick="toggleLang()"><span class="lang-en">中</span><span class="lang-zh">EN</span></button>
       <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
@@ -292,6 +318,26 @@
       </div>
       <button class="btn-deploy" id="btn-deploy" onclick="doDeploy()" disabled data-i18n="console.deploy.btn">Deploy</button>
       <div class="deploy-status" id="deploy-status"></div>
+    </div>
+  </div>
+
+  <!-- UPGRADE MODAL -->
+  <div class="modal-overlay hidden" id="upgrade-modal" onclick="if(event.target===this)closeUpgrade()">
+    <div class="modal-card">
+      <div class="modal-title" data-i18n="upgrade.title">Upgrade your plan</div>
+      <div class="modal-sub"><span data-i18n="upgrade.to">Upgrade to</span> <span class="modal-tier" id="upgrade-tier-name">Pro</span></div>
+      <div class="modal-price" id="upgrade-price"></div>
+      <div class="modal-error hidden" id="upgrade-error"></div>
+      <div class="modal-field">
+        <label class="modal-label" for="upgrade-email" data-i18n="upgrade.emailLabel">Billing email</label>
+        <input type="email" class="modal-input" id="upgrade-email" placeholder="you@example.com" autocomplete="email">
+        <div class="modal-hint" data-i18n="upgrade.emailHint">Pay with this same email so we can match your subscription automatically.</div>
+      </div>
+      <div class="modal-hint" data-i18n="upgrade.paidHint">After payment your plan upgrades automatically, usually within a minute.</div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-ghost" onclick="closeUpgrade()" data-i18n="upgrade.cancel">Cancel</button>
+        <button class="modal-btn modal-btn-primary" id="upgrade-proceed" onclick="proceedUpgrade()" data-i18n="upgrade.proceed">Continue to payment</button>
+      </div>
     </div>
   </div>
 
@@ -366,6 +412,20 @@
     'console.github.connecting': { en: 'Connecting...', zh: '連結中...' },
     'console.github.connectFailed': { en: 'Failed to connect GitHub', zh: '連結 GitHub 失敗' },
     'console.github.publicOnly': { en: 'Currently supports public repos only', zh: '目前僅支援公開 repo' },
+    'upgrade.navBtn': { en: 'Upgrade', zh: '升級方案' },
+    'upgrade.title': { en: 'Upgrade your plan', zh: '升級你的方案' },
+    'upgrade.to': { en: 'Upgrade to', zh: '升級至' },
+    'upgrade.perMonth': { en: '/mo', zh: '/月' },
+    'upgrade.emailLabel': { en: 'Billing email', zh: '帳單 Email' },
+    'upgrade.emailHint': { en: 'Pay with this same email so we can match your subscription automatically.', zh: '請使用相同的 Email 付款，系統才能自動對應你的訂閱。' },
+    'upgrade.paidHint': { en: 'After payment your plan upgrades automatically, usually within a minute.', zh: '付款完成後方案會自動升級，通常一分鐘內生效。' },
+    'upgrade.cancel': { en: 'Cancel', zh: '取消' },
+    'upgrade.proceed': { en: 'Continue to payment', zh: '前往付款' },
+    'upgrade.saving': { en: 'Saving...', zh: '處理中...' },
+    'upgrade.emailInvalid': { en: 'Please enter a valid email address', zh: '請輸入有效的 Email' },
+    'upgrade.emailTaken': { en: 'That email is already used by another account', zh: '該 Email 已被其他帳號使用' },
+    'upgrade.emailFailed': { en: 'Could not save email, please try again', zh: '無法儲存 Email，請再試一次' },
+    'upgrade.notConfigured': { en: 'Checkout for this plan is not available yet. Please contact support.', zh: '此方案的結帳連結尚未開放，請聯絡客服。' },
     'time.justNow': { en: 'just now', zh: '剛剛' },
     'time.m': { en: 'm ago', zh: '分鐘前' },
     'time.h': { en: 'h ago', zh: '小時前' },
@@ -499,6 +559,11 @@
       var host = location.host;
       suffix.textContent = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
         ? ' (localhost)' : '.' + location.hostname;
+      // Upgrade button: visible while there's a higher tier to move to
+      var $btnUpgrade = document.getElementById('btn-upgrade');
+      if (nextTier(currentUser.plan)) $btnUpgrade.classList.remove('hidden');
+      else $btnUpgrade.classList.add('hidden');
+      checkUpgradeParam();
     }
 
     function doLogout() {
@@ -506,6 +571,138 @@
       authToken = null;
       localStorage.removeItem('pipee_token');
       showLogin();
+    }
+
+    // ── Upgrade flow (PayGate) ──
+    var PLAN_PRICE = { pro: '$9', creator: '$29' };
+    var PLAN_RANK = { free: 0, pro: 1, creator: 2 };
+    var plansCache = null;
+    var upgradeTier = null;
+
+    function nextTier(plan) {
+      if (plan === 'free') return 'pro';
+      if (plan === 'pro') return 'creator';
+      return null;
+    }
+
+    async function loadPlans() {
+      if (plansCache) return plansCache;
+      try {
+        var resp = await fetch('/api/plans');
+        if (resp.ok) {
+          var data = await resp.json();
+          plansCache = data.plans || [];
+        }
+      } catch { /* ignore — handled when reading checkout_url */ }
+      return plansCache || [];
+    }
+
+    function checkoutUrlFor(tier) {
+      if (!plansCache) return null;
+      var p = plansCache.find(function (x) { return x.tier === tier; });
+      return p ? p.checkout_url : null;
+    }
+
+    function openUpgradeNav() {
+      var tier = nextTier(currentUser && currentUser.plan);
+      if (tier) openUpgrade(tier);
+    }
+
+    async function openUpgrade(tier) {
+      if (!currentUser) return;
+      if (tier !== 'pro' && tier !== 'creator') return;
+      // Don't offer a downgrade / same tier
+      if (PLAN_RANK[currentUser.plan] >= PLAN_RANK[tier]) return;
+
+      upgradeTier = tier;
+      loadPlans();
+
+      var label = tier.charAt(0).toUpperCase() + tier.slice(1);
+      document.getElementById('upgrade-tier-name').textContent = label;
+      document.getElementById('upgrade-price').innerHTML =
+        escapeHtml(PLAN_PRICE[tier] || '') + ' <small>' + escapeHtml(t('upgrade.perMonth')) + '</small>';
+
+      var $err = document.getElementById('upgrade-error');
+      $err.classList.add('hidden');
+      $err.textContent = '';
+
+      var $email = document.getElementById('upgrade-email');
+      $email.value = (currentUser.email || '');
+
+      var $proceed = document.getElementById('upgrade-proceed');
+      $proceed.disabled = false;
+      $proceed.textContent = t('upgrade.proceed');
+
+      document.getElementById('upgrade-modal').classList.remove('hidden');
+      if (!$email.value) $email.focus();
+    }
+
+    function closeUpgrade() {
+      document.getElementById('upgrade-modal').classList.add('hidden');
+    }
+
+    function upgradeError(msg) {
+      var $err = document.getElementById('upgrade-error');
+      $err.textContent = msg;
+      $err.classList.remove('hidden');
+    }
+
+    async function proceedUpgrade() {
+      if (!upgradeTier) return;
+      var $proceed = document.getElementById('upgrade-proceed');
+      var $err = document.getElementById('upgrade-error');
+      $err.classList.add('hidden');
+
+      var email = document.getElementById('upgrade-email').value.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return upgradeError(t('upgrade.emailInvalid'));
+      }
+
+      $proceed.disabled = true;
+      $proceed.textContent = t('upgrade.saving');
+
+      // Persist email if it changed, so the webhook can map the subscription.
+      if (email !== (currentUser.email || '')) {
+        try {
+          var resp = await fetch('/api/user/email', {
+            method: 'PUT',
+            headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email }),
+          });
+          if (!resp.ok) {
+            var data = await resp.json().catch(function () { return {}; });
+            $proceed.disabled = false;
+            $proceed.textContent = t('upgrade.proceed');
+            return upgradeError(data.code === 'CONFLICT' ? t('upgrade.emailTaken') : t('upgrade.emailFailed'));
+          }
+          currentUser.email = email;
+        } catch {
+          $proceed.disabled = false;
+          $proceed.textContent = t('upgrade.proceed');
+          return upgradeError(t('upgrade.emailFailed'));
+        }
+      }
+
+      // Make sure plans (and checkout URLs) are loaded, then redirect to PAYUNi.
+      await loadPlans();
+      var url = checkoutUrlFor(upgradeTier);
+      if (!url) {
+        $proceed.disabled = false;
+        $proceed.textContent = t('upgrade.proceed');
+        return upgradeError(t('upgrade.notConfigured'));
+      }
+      window.location.href = url;
+    }
+
+    function checkUpgradeParam() {
+      var tier = new URLSearchParams(location.search).get('upgrade');
+      if (!tier) return;
+      // Clear the param so a refresh doesn't reopen the modal
+      history.replaceState({}, '', location.pathname);
+      if ((tier === 'pro' || tier === 'creator') && currentUser
+          && PLAN_RANK[currentUser.plan] < PLAN_RANK[tier]) {
+        openUpgrade(tier);
+      }
     }
 
     // ── Sites ──

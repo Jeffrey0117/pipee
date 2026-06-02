@@ -9,5 +9,14 @@
     "token": "",
     "owner": "pipee",
     "webhookHost": ""
+  },
+  "paygate": {
+    "product": "pipee",
+    "url": "https://paygate.isnowfriend.com",
+    "webhookSecret": "",
+    "checkout": {
+      "pro": "",
+      "creator": ""
+    }
   }
 }

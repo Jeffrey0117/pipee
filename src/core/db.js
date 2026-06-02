@@ -39,6 +39,7 @@ function getDb() {
   initSchema(_db);
   migrateGitFields(_db);
   migrateAiFields(_db);
+  migrateSubscriptionFields(_db);
   promoteAdmin(_db);
 
   return _db;
@@ -85,6 +86,26 @@ function migrateAiFields(db) {
   if (!columns.includes('ai_edits_reset_at')) {
     db.exec("ALTER TABLE users ADD COLUMN ai_edits_reset_at TEXT DEFAULT NULL");
   }
+}
+
+// ── Subscription field migration ─────────────
+// email maps a local account to a PayGate subscription;
+// sub_expires_at records the current paid period's end (ISO string, null = no active sub).
+
+function migrateSubscriptionFields(db) {
+  const columns = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+
+  if (!columns.includes('email')) {
+    db.exec("ALTER TABLE users ADD COLUMN email TEXT DEFAULT NULL");
+  }
+  if (!columns.includes('sub_expires_at')) {
+    db.exec("ALTER TABLE users ADD COLUMN sub_expires_at TEXT DEFAULT NULL");
+  }
+  // Case-insensitive uniqueness for email (partial index ignores NULLs).
+  db.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email " +
+    "ON users(email COLLATE NOCASE) WHERE email IS NOT NULL"
+  );
 }
 
 // ── Git field migration ──────────────────────
@@ -135,17 +156,23 @@ function getUserByToken(token) {
   return db.prepare('SELECT * FROM users WHERE token = ?').get(token) || null;
 }
 
-function createUser({ username, passwordHash, salt, token }) {
+function getUserByEmail(email) {
+  if (!email) return null;
+  const db = getDb();
+  return db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(email) || null;
+}
+
+function createUser({ username, passwordHash, salt, token, email }) {
   const db = getDb();
   const result = db.prepare(
-    'INSERT INTO users (username, password_hash, salt, token) VALUES (?, ?, ?, ?)'
-  ).run(username, passwordHash, salt, token || null);
+    'INSERT INTO users (username, password_hash, salt, token, email) VALUES (?, ?, ?, ?, ?)'
+  ).run(username, passwordHash, salt, token || null, email || null);
   return getUserById(result.lastInsertRowid);
 }
 
 function updateUser(id, fields) {
   const db = getDb();
-  const allowed = ['username', 'password_hash', 'salt', 'token', 'plan', 'max_sites', 'ai_edits_used', 'ai_edits_reset_at'];
+  const allowed = ['username', 'password_hash', 'salt', 'token', 'plan', 'max_sites', 'ai_edits_used', 'ai_edits_reset_at', 'email', 'sub_expires_at'];
   const sets = [];
   const values = [];
   for (const key of allowed) {
@@ -229,6 +256,7 @@ module.exports = {
   getUserById,
   getUserByUsername,
   getUserByToken,
+  getUserByEmail,
   createUser,
   updateUser,
 
