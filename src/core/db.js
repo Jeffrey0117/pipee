@@ -268,6 +268,29 @@ function countSitesByUser(userId) {
   return row.count;
 }
 
+// ── Admin API ─────────────────────────────────
+// Cross-tenant read used ONLY by the id=1 admin overview. Selects non-sensitive
+// columns (no password_hash/salt/token) and nests each user's sites.
+
+function listAllUsersWithSites() {
+  const db = getDb();
+  const users = db.prepare(
+    `SELECT id, username, email, email_verified, plan, sub_expires_at, created_at
+       FROM users ORDER BY id ASC`
+  ).all();
+  const sites = db.prepare(
+    `SELECT slug, user_id, size, deploy_method, created_at, updated_at
+       FROM sites ORDER BY created_at DESC`
+  ).all();
+
+  const byUser = new Map(users.map((u) => [u.id, { ...u, sites: [] }]));
+  for (const s of sites) {
+    const entry = byUser.get(s.user_id);
+    if (entry) entry.sites = [...entry.sites, s];
+  }
+  return Array.from(byUser.values());
+}
+
 // ── Lifecycle ───────────────────────────────
 
 function close() {
@@ -295,6 +318,7 @@ module.exports = {
   updateSite,
   deleteSite,
   countSitesByUser,
+  listAllUsersWithSites,
 
   close,
   DB_PATH,

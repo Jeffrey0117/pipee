@@ -284,6 +284,11 @@ async function handle(req, res, pathname, config) {
     return handlePaygateWebhook(req, res, config);
   }
 
+  // GET /api/admin/overview (admin-only: all users + their sites)
+  if (req.method === 'GET' && pathname === '/api/admin/overview') {
+    return handleAdminOverview(req, res, config);
+  }
+
   // GET /api/user/sites
   if (req.method === 'GET' && pathname === '/api/user/sites') {
     return handleUserSites(req, res, config);
@@ -783,6 +788,47 @@ function handleUserSites(req, res, config) {
     sites,
     quota: { used: sites.length, max: planConfig.maxSites },
   });
+}
+
+// ── GET /api/admin/overview ──
+// Admin-only cross-tenant view. Guarded by a STRICT id===1 check — NOT by plan,
+// because a paying `creator` user must never see other tenants' data.
+
+const ADMIN_USER_ID = 1;
+
+function handleAdminOverview(req, res, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
+
+  const { user } = result;
+  if (user.id !== ADMIN_USER_ID) {
+    return jsonErr(res, 'Forbidden', 'FORBIDDEN', 403);
+  }
+
+  const users = db.listAllUsersWithSites().map((u) => ({
+    id: u.id,
+    username: u.username,
+    email: u.email || null,
+    email_verified: !!u.email_verified,
+    plan: effectivePlan(u),
+    sub_expires_at: u.sub_expires_at || null,
+    created_at: u.created_at,
+    sites: u.sites.map((s) => ({
+      slug: s.slug,
+      url: getSiteUrl(req, s.slug, config),
+      size: s.size,
+      deploy_method: s.deploy_method || 'upload',
+      created_at: s.created_at,
+      updated_at: s.updated_at,
+    })),
+  }));
+
+  const totals = {
+    users: users.length,
+    sites: users.reduce((n, u) => n + u.sites.length, 0),
+  };
+
+  return jsonOk(res, { users, totals });
 }
 
 // ── POST /api/user/sites ──

@@ -243,6 +243,20 @@
       .site-card-top { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
       .site-card-right { margin-left: 14px; }
     }
+
+    /* Admin panel (id=1 only) */
+    .admin-panel { margin-top: 3rem; border-top: 1px solid var(--border, rgba(255,255,255,0.08)); padding-top: 2rem; }
+    .admin-list { display: flex; flex-direction: column; gap: 0.75rem; }
+    .admin-user { border: 1px solid rgba(124,58,237,0.18); border-radius: 10px; padding: 0.85rem 1rem; background: rgba(124,58,237,0.04); }
+    .admin-user-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; cursor: pointer; }
+    .admin-user-name { font-weight: 600; color: var(--text); }
+    .admin-user-meta { font-size: 0.78rem; color: var(--text-dim); }
+    .admin-user-count { margin-left: auto; font-size: 0.78rem; color: var(--text-dim); }
+    .admin-sites { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem; }
+    .admin-site { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; padding: 0.4rem 0.6rem; border-radius: 7px; background: rgba(255,255,255,0.03); }
+    .admin-site a { color: var(--accent); text-decoration: none; word-break: break-all; }
+    .admin-site-meta { margin-left: auto; color: var(--text-muted, var(--text-dim)); font-size: 0.72rem; white-space: nowrap; }
+    .admin-empty { font-size: 0.78rem; color: var(--text-dim); padding: 0.3rem 0.6rem; }
   </style>
   <script>
     (function() {
@@ -318,6 +332,15 @@
       </div>
       <button class="btn-deploy" id="btn-deploy" onclick="doDeploy()" disabled data-i18n="console.deploy.btn">Deploy</button>
       <div class="deploy-status" id="deploy-status"></div>
+    </div>
+
+    <!-- ADMIN PANEL (only rendered for the id=1 admin) -->
+    <div class="admin-panel hidden" id="admin-panel">
+      <div class="section-head">
+        <h2>會員管理</h2>
+        <span class="quota" id="admin-totals"></span>
+      </div>
+      <div id="admin-list" class="admin-list"></div>
     </div>
   </div>
 
@@ -587,6 +610,7 @@
       if (nextTier(currentUser.plan)) $btnUpgrade.classList.remove('hidden');
       else $btnUpgrade.classList.add('hidden');
       checkUpgradeParam();
+      maybeLoadAdmin();
     }
 
     function doLogout() {
@@ -594,6 +618,69 @@
       authToken = null;
       localStorage.removeItem('pipee_token');
       showLogin();
+    }
+
+    // ── Admin overview (id=1 only) ──
+    async function maybeLoadAdmin() {
+      var $panel = document.getElementById('admin-panel');
+      // Only the id=1 admin gets the panel. Server enforces this too (403);
+      // hiding it client-side is just UX, never the security boundary.
+      if (!currentUser || currentUser.id !== 1) {
+        $panel.classList.add('hidden');
+        return;
+      }
+      try {
+        var resp = await fetch('/api/admin/overview', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        if (!resp.ok) { $panel.classList.add('hidden'); return; }
+        var data = await resp.json();
+        renderAdmin(data);
+        $panel.classList.remove('hidden');
+      } catch {
+        $panel.classList.add('hidden');
+      }
+    }
+
+    function renderAdmin(data) {
+      var users = (data && data.users) || [];
+      var totals = (data && data.totals) || { users: users.length, sites: 0 };
+      document.getElementById('admin-totals').textContent =
+        totals.users + ' 會員 · ' + totals.sites + ' 站';
+
+      var html = users.map(function (u) {
+        var sites = u.sites || [];
+        var sitesHtml = sites.length
+          ? sites.map(function (s) {
+              return '<div class="admin-site">' +
+                '<a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener">' +
+                  escapeHtml(s.slug) + '</a>' +
+                '<span class="admin-site-meta">' +
+                  escapeHtml(s.deploy_method || 'upload') + ' · ' +
+                  escapeHtml(formatSize(s.size || 0)) + ' · ' +
+                  escapeHtml(formatDate(s.updated_at)) +
+                '</span></div>';
+            }).join('')
+          : '<div class="admin-empty">沒有站台</div>';
+
+        var email = u.email
+          ? escapeHtml(u.email) + (u.email_verified ? ' ✓' : ' (未驗證)')
+          : '無 email';
+
+        return '<div class="admin-user">' +
+          '<div class="admin-user-head">' +
+            '<span class="admin-user-name">' + escapeHtml(u.username) +
+              (u.id === 1 ? ' 👑' : '') + '</span>' +
+            '<span class="plan-badge ' + escapeHtml(u.plan) + '">' + escapeHtml(u.plan) + '</span>' +
+            '<span class="admin-user-meta">' + email + '</span>' +
+            '<span class="admin-user-count">' + sites.length + ' 站 · ' +
+              escapeHtml(formatDate(u.created_at)) + ' 加入</span>' +
+          '</div>' +
+          '<div class="admin-sites">' + sitesHtml + '</div>' +
+        '</div>';
+      }).join('');
+
+      document.getElementById('admin-list').innerHTML = html;
     }
 
     // ── Upgrade flow (PayGate) ──
