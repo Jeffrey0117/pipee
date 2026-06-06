@@ -12,7 +12,7 @@
   },
   "paygate": {
     "product": "pipee",
-    "url": "https://paygate.isnowfriend.com",
+    "url": "https://paygate.example.com",
     "webhookSecret": "",
     "checkout": {
       "pro": "",
@@ -20,8 +20,8 @@
     }
   },
   "mailer": {
-    "url": "",
+    "url": "http://localhost:4018",
     "token": "",
-    "from": "Pipee <noreply@isnowfriend.com>"
+    "from": "Pipee <noreply@example.com>"
   }
 }

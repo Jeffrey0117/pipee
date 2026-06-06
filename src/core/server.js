@@ -47,7 +47,7 @@ function loadConfig() {
     gitea: config.gitea || {},
     paygate: {
       product: (config.paygate && config.paygate.product) || 'pipee',
-      url: (config.paygate && config.paygate.url) || 'https://paygate.isnowfriend.com',
+      url: (config.paygate && config.paygate.url) || 'https://paygate.example.com',
       // Prefer env var so the secret stays out of committed config.
       webhookSecret: process.env.PAYGATE_WEBHOOK_SECRET
         || (config.paygate && config.paygate.webhookSecret) || '',
@@ -59,7 +59,7 @@ function loadConfig() {
       // is returned in the API response instead of emailed).
       url: (config.mailer && config.mailer.url) || '',
       token: process.env.MAILER_TOKEN || (config.mailer && config.mailer.token) || '',
-      from: (config.mailer && config.mailer.from) || 'Pipee <noreply@isnowfriend.com>',
+      from: (config.mailer && config.mailer.from) || 'Pipee <noreply@example.com>',
     },
   };
 }
