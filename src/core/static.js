@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const bandwidth = require('./bandwidth');
 
 const ROOT = path.join(__dirname, '../..');
 const STATIC_DIR = path.join(ROOT, 'data', 'static');
@@ -88,6 +89,17 @@ function handleSite(req, res, slug) {
     return res.end('<h1>Site not found</h1>');
   }
 
+  // Anti-abuse: per-site daily bandwidth cap (owner's plan). Stops a site
+  // from being used as a free CDN; resets at UTC midnight.
+  if (bandwidth.isOverLimit(slug)) {
+    res.writeHead(503, {
+      'content-type': 'text/html; charset=utf-8',
+      'retry-after': String(bandwidth.secondsUntilReset()),
+      'cache-control': 'no-store',
+    });
+    return res.end('<h1>503 — Daily bandwidth limit reached</h1><p>This site has served its daily traffic allowance. Try again tomorrow.</p>');
+  }
+
   const urlPath = decodeURIComponent(req.url.split('?')[0]);
   const resolved = path.resolve(siteDir, '.' + urlPath);
 
@@ -105,6 +117,7 @@ function handleSite(req, res, slug) {
     if (stat.isFile()) {
       const ext = path.extname(resolved).toLowerCase();
       const contentType = MIME[ext] || 'application/octet-stream';
+      bandwidth.recordBytes(slug, stat.size);
       res.writeHead(200, {
         'content-type': contentType,
         'cache-control': getCacheControl(resolved, ext),
@@ -116,6 +129,7 @@ function handleSite(req, res, slug) {
     if (stat.isDirectory()) {
       const dirIndex = path.join(resolved, 'index.html');
       if (fs.existsSync(dirIndex)) {
+        bandwidth.recordBytes(slug, fs.statSync(dirIndex).size);
         res.writeHead(200, {
           'content-type': 'text/html; charset=utf-8',
           'cache-control': 'no-cache',
@@ -136,6 +150,7 @@ function handleSite(req, res, slug) {
   // No extension (e.g. /about, /dashboard) -> SPA fallback to index.html
   const indexPath = path.join(siteDir, 'index.html');
   if (fs.existsSync(indexPath)) {
+    bandwidth.recordBytes(slug, fs.statSync(indexPath).size);
     res.writeHead(200, {
       'content-type': 'text/html; charset=utf-8',
       'cache-control': 'no-cache',

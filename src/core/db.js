@@ -12,11 +12,32 @@ const DB_PATH = path.join(__dirname, '../../data/pipee-data.db');
 
 // ── Plan configuration ──────────────────────
 
+const MB = 1024 * 1024;
+const GB = 1024 * MB;
+
 const PLANS = {
-  free:    { maxSites: 3,   aiEditsPerMonth: 0,   label: 'Free' },
-  pro:     { maxSites: 20,  aiEditsPerMonth: 200,  label: 'Pro' },
-  creator: { maxSites: 100, aiEditsPerMonth: 9999, label: 'Creator' },
+  //                                                         total deployed bytes      bytes served per site per day
+  free:    { maxSites: 3,   aiEditsPerMonth: 0,   label: 'Free',    maxStorageBytes: 150 * MB, bandwidthPerDayBytes: 1 * GB },
+  pro:     { maxSites: 20,  aiEditsPerMonth: 200,  label: 'Pro',     maxStorageBytes: 2 * GB,   bandwidthPerDayBytes: 10 * GB },
+  creator: { maxSites: 100, aiEditsPerMonth: 9999, label: 'Creator', maxStorageBytes: 10 * GB,  bandwidthPerDayBytes: 50 * GB },
 };
+
+// ── Plan resolution ──
+// True when the user currently holds an active paid subscription period.
+// A null expiry means the plan wasn't set by a time-bound subscription
+// (e.g. the admin promotion, or a manual grant) and stays in effect.
+
+function subscriptionActive(user) {
+  if (!user.sub_expires_at) return user.plan !== 'free';
+  return Date.parse(user.sub_expires_at) > Date.now();
+}
+
+// The plan whose entitlements actually apply right now. Falls back to free
+// once a paid period has lapsed, so a missed `expired` webhook can't leave a
+// user with elevated quotas indefinitely.
+function effectivePlan(user) {
+  return subscriptionActive(user) ? (user.plan || 'free') : 'free';
+}
 
 // ── Lazy singleton ──────────────────────────
 
@@ -268,6 +289,21 @@ function countSitesByUser(userId) {
   return row.count;
 }
 
+// Total deployed bytes across all of a user's sites (account storage quota).
+function sumSiteSizesByUser(userId) {
+  const db = getDb();
+  const row = db.prepare('SELECT COALESCE(SUM(size), 0) AS total FROM sites WHERE user_id = ?').get(userId);
+  return row.total;
+}
+
+// The owning user of a site, for plan-based limits during site serving.
+function getSiteOwner(slug) {
+  const db = getDb();
+  return db.prepare(
+    'SELECT u.* FROM users u JOIN sites s ON s.user_id = u.id WHERE s.slug = ?'
+  ).get(slug) || null;
+}
+
 // ── Admin API ─────────────────────────────────
 // Cross-tenant read used ONLY by the id=1 admin overview. Selects non-sensitive
 // columns (no password_hash/salt/token) and nests each user's sites.
@@ -302,6 +338,8 @@ function close() {
 
 module.exports = {
   PLANS,
+  subscriptionActive,
+  effectivePlan,
 
   getUserById,
   getUserByUsername,
@@ -318,6 +356,8 @@ module.exports = {
   updateSite,
   deleteSite,
   countSitesByUser,
+  sumSiteSizesByUser,
+  getSiteOwner,
   listAllUsersWithSites,
 
   close,

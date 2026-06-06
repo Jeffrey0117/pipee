@@ -12,11 +12,12 @@ const db = require('./db');
 const { hashPassword, verifyPassword, generateToken, verifyUserRequest } = require('./user-auth');
 const { validateSlug, STATIC_DIR } = require('./static');
 const { deployFromGit, deployFromGitAtSha } = require('./git-deploy');
+const { getClientIp, rateLimit } = require('./rate-limit');
 const gitea = require('./gitea');
 const aiEditor = require('./ai-editor');
 const aiSessions = require('./ai-sessions');
 
-const { PLANS } = db;
+const { PLANS, subscriptionActive, effectivePlan } = db;
 const AI_ALLOWED_PLANS = new Set(['pro', 'creator']);
 const GIT_DASHBOARD_PLANS = new Set(['pro', 'creator']);
 
@@ -50,19 +51,66 @@ function normalizeEmail(email) {
   return String(email).trim().toLowerCase();
 }
 
-// True when the user currently holds an active paid subscription period.
-// A null expiry means the plan wasn't set by a time-bound subscription
-// (e.g. the admin promotion, or a manual grant) and stays in effect.
-function subscriptionActive(user) {
-  if (!user.sub_expires_at) return user.plan !== 'free';
-  return Date.parse(user.sub_expires_at) > Date.now();
+// subscriptionActive / effectivePlan live in db.js (next to PLANS) so other
+// modules (e.g. bandwidth accounting) can resolve entitlements too.
+
+// ── Rate limiting ──
+// In-memory sliding windows keyed by client IP (unauthenticated endpoints),
+// user id (authenticated), or slug (webhooks). Single source of truth for
+// the per-endpoint policies.
+
+const RATE_LIMITS = {
+  register:      { max: 5,  windowMs: 60 * 60 * 1000 }, // per IP — scripted mass sign-ups
+  login:         { max: 20, windowMs: 10 * 60 * 1000 }, // per IP — credential stuffing
+  deploy:        { max: 20, windowMs: 10 * 60 * 1000 }, // per user — all deploy flavors
+  webhookDeploy: { max: 10, windowMs: 10 * 60 * 1000 }, // per slug — push-storm hammering
+  setEmail:      { max: 5,  windowMs: 60 * 60 * 1000 }, // per user — outbound mail bombing
+};
+
+// Returns true (and ends the response with 429) when the caller is over the
+// limit for `name`; callers should `return` immediately on true.
+function tooManyRequests(res, name, key) {
+  const policy = RATE_LIMITS[name];
+  const result = rateLimit(`${name}:${key}`, policy.max, policy.windowMs);
+  if (result.allowed) return false;
+  res.writeHead(429, {
+    'content-type': 'application/json',
+    'retry-after': String(result.retryAfterSec),
+  });
+  res.end(JSON.stringify({ error: 'Too many requests. Please try again later.', code: 'RATE_LIMITED' }));
+  return true;
 }
 
-// The plan whose entitlements actually apply right now. Falls back to free
-// once a paid period has lapsed, so a missed `expired` webhook can't leave a
-// user with elevated quotas indefinitely.
-function effectivePlan(user) {
-  return subscriptionActive(user) ? (user.plan || 'free') : 'free';
+// ── Cloudflare Turnstile ──
+// Only enforced when a secret is configured. Fail-closed: a token that can't
+// be verified (bad, missing, or siteverify unreachable) rejects registration.
+
+async function verifyTurnstile(token, ip, secret) {
+  if (!token || typeof token !== 'string' || token.length > 2048) return false;
+  try {
+    const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ secret, response: token, remoteip: ip }).toString(),
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    return data.success === true;
+  } catch (err) {
+    console.error('[pipee] Turnstile verification failed:', err.message);
+    return false;
+  }
+}
+
+// ── Storage quota ──
+// Bytes a user may still deploy into `slug` without breaching the account-wide
+// storage cap of their effective plan (the site's current size is freed by
+// the deploy's atomic swap, so it doesn't count against the headroom).
+
+function storageHeadroom(user, site) {
+  const planConfig = PLANS[effectivePlan(user)] || PLANS.free;
+  const otherSitesTotal = db.sumSiteSizesByUser(user.id) - (site.size || 0);
+  return planConfig.maxStorageBytes - otherSitesTotal;
 }
 
 // ── Email verification ──
@@ -269,6 +317,13 @@ async function handle(req, res, pathname, config) {
     return handlePlans(req, res, config);
   }
 
+  // GET /api/config (public: non-secret client config, e.g. Turnstile site key)
+  if (req.method === 'GET' && pathname === '/api/config') {
+    return jsonOk(res, {
+      turnstile_site_key: (config.turnstile && config.turnstile.siteKey) || null,
+    });
+  }
+
   // PUT /api/user/email (set/update billing email for subscription mapping)
   if (req.method === 'PUT' && pathname === '/api/user/email') {
     return handleSetEmail(req, res, config);
@@ -395,9 +450,12 @@ async function handle(req, res, pathname, config) {
 // ── POST /api/auth/register ──
 
 async function handleRegister(req, res, config) {
+  const ip = getClientIp(req, config.trustProxy);
+  if (tooManyRequests(res, 'register', ip)) return;
+
   let body;
   try {
-    body = await collectBody(req, 4096);
+    body = await collectBody(req, 8192);
   } catch {
     return jsonErr(res, 'Failed to read body', 'BAD_REQUEST', 400);
   }
@@ -407,6 +465,15 @@ async function handleRegister(req, res, config) {
     data = JSON.parse(body.toString('utf8'));
   } catch {
     return jsonErr(res, 'Invalid JSON', 'BAD_REQUEST', 400);
+  }
+
+  // Bot gate (active only when a Turnstile secret is configured).
+  const turnstileSecret = config.turnstile && config.turnstile.secret;
+  if (turnstileSecret) {
+    const human = await verifyTurnstile(data.turnstile_token, ip, turnstileSecret);
+    if (!human) {
+      return jsonErr(res, 'CAPTCHA verification failed. Please try again.', 'CAPTCHA_FAILED', 403);
+    }
   }
 
   if (!data.username || typeof data.username !== 'string' || data.username.trim().length < 3) {
@@ -478,6 +545,8 @@ async function handleRegister(req, res, config) {
 // ── POST /api/auth/login ──
 
 async function handleLogin(req, res, config) {
+  if (tooManyRequests(res, 'login', getClientIp(req, config.trustProxy))) return;
+
   let body;
   try {
     body = await collectBody(req, 4096);
@@ -573,6 +642,10 @@ async function handleSetEmail(req, res, config) {
   const result = verifyUserRequest(req, config);
   if (!result) return jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401);
   const { user } = result;
+
+  // Each call may send a verification email to an arbitrary address — limit
+  // it so an account can't be scripted into an outbound mail cannon.
+  if (tooManyRequests(res, 'setEmail', user.id)) return;
 
   let body;
   try {
@@ -923,6 +996,8 @@ async function handleDeploy(req, res, slug, config) {
 
   const { user } = result;
 
+  if (tooManyRequests(res, 'deploy', user.id)) return;
+
   // Ownership check
   const site = db.getSite(slug);
   if (!site) return jsonErr(res, 'Site not found', 'NOT_FOUND', 404);
@@ -975,6 +1050,12 @@ async function handleDeploy(req, res, slug, config) {
   if (!fs.existsSync(path.join(tempDir, 'index.html'))) {
     try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
     return jsonErr(res, 'Archive must contain index.html at the root', 'NO_INDEX_HTML', 400);
+  }
+
+  // Account-wide storage quota (checked before the swap so nothing goes live)
+  if (extractedSize > storageHeadroom(user, site)) {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    return jsonErr(res, 'Account storage limit reached. Delete a site or upgrade your plan.', 'STORAGE_QUOTA_EXCEEDED', 413);
   }
 
   // Swap directories
@@ -1126,8 +1207,16 @@ async function handleGitDeploy(req, res, slug, config) {
     return jsonErr(res, 'No git repo linked. Use link-repo first.', 'NO_REPO', 400);
   }
 
+  if (tooManyRequests(res, 'deploy', user.id)) return;
+
+  // Per-deploy cap: the per-site archive limit AND the account-wide quota.
+  const maxBytes = Math.min(MAX_EXTRACTED_SIZE, storageHeadroom(user, site));
+  if (maxBytes <= 0) {
+    return jsonErr(res, 'Account storage limit reached. Delete a site or upgrade your plan.', 'STORAGE_QUOTA_EXCEEDED', 413);
+  }
+
   try {
-    const { commit, size } = deployFromGit(slug, site.repo_url, site.branch || 'main');
+    const { commit, size } = deployFromGit(slug, site.repo_url, site.branch || 'main', { maxBytes });
     db.updateSite(slug, { last_commit: commit, size });
 
     const siteUrl = getSiteUrl(req, slug, config);
@@ -1141,6 +1230,9 @@ async function handleGitDeploy(req, res, slug, config) {
   } catch (err) {
     if (err.message === 'NO_INDEX_HTML') {
       return jsonErr(res, 'Repository must contain index.html at the root', 'NO_INDEX_HTML', 400);
+    }
+    if (err.message === 'SITE_TOO_LARGE') {
+      return jsonErr(res, 'Repository exceeds your size or storage limit', 'SITE_TOO_LARGE', 413);
     }
     return jsonErr(res, 'Git deploy failed', 'DEPLOY_FAILED', 500);
   }
@@ -1159,6 +1251,8 @@ async function handleWebhookDeploy(req, res, slug, config) {
     res.writeHead(400, { 'content-type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Site not configured for git deploy' }));
   }
+
+  if (tooManyRequests(res, 'webhookDeploy', slug)) return;
 
   // Verify Gitea signature if webhook secret is set
   const siteConfig = JSON.parse(site.config || '{}');
@@ -1186,7 +1280,9 @@ async function handleWebhookDeploy(req, res, slug, config) {
   res.end(JSON.stringify({ success: true, message: 'Deploy triggered' }));
 
   try {
-    const { commit, size } = deployFromGit(slug, site.repo_url, site.branch || 'main');
+    const owner = db.getUserById(site.user_id);
+    const maxBytes = Math.min(MAX_EXTRACTED_SIZE, Math.max(0, storageHeadroom(owner, site)));
+    const { commit, size } = deployFromGit(slug, site.repo_url, site.branch || 'main', { maxBytes });
     db.updateSite(slug, { last_commit: commit, size });
     console.log(`[webhook] Deployed ${slug} from git (${commit.slice(0, 7)})`);
   } catch (err) {
@@ -1452,8 +1548,15 @@ async function handleRollback(req, res, slug, config) {
     return jsonErr(res, 'Invalid commit SHA', 'BAD_REQUEST', 400);
   }
 
+  if (tooManyRequests(res, 'deploy', user.id)) return;
+
+  const maxBytes = Math.min(MAX_EXTRACTED_SIZE, storageHeadroom(user, site));
+  if (maxBytes <= 0) {
+    return jsonErr(res, 'Account storage limit reached. Delete a site or upgrade your plan.', 'STORAGE_QUOTA_EXCEEDED', 413);
+  }
+
   try {
-    const { commit, size } = deployFromGitAtSha(slug, site.repo_url, sha);
+    const { commit, size } = deployFromGitAtSha(slug, site.repo_url, sha, { maxBytes });
     db.updateSite(slug, { last_commit: commit, size });
 
     const siteUrl = getSiteUrl(req, slug, config);
@@ -1470,6 +1573,9 @@ async function handleRollback(req, res, slug, config) {
     }
     if (err.message === 'NO_INDEX_HTML') {
       return jsonErr(res, 'That commit has no index.html at root', 'NO_INDEX_HTML', 400);
+    }
+    if (err.message === 'SITE_TOO_LARGE') {
+      return jsonErr(res, 'That commit exceeds your size or storage limit', 'SITE_TOO_LARGE', 413);
     }
     console.error(`[pipee] Rollback failed for ${slug}@${sha}:`, err.message);
     return jsonErr(res, 'Rollback failed', 'ROLLBACK_FAILED', 500);
@@ -1583,6 +1689,8 @@ async function handleGitHubWebhook(req, res, slug, config) {
     return res.end(JSON.stringify({ error: 'GitHub webhook not configured' }));
   }
 
+  if (tooManyRequests(res, 'webhookDeploy', slug)) return;
+
   let body;
   try {
     body = await collectBody(req, 1024 * 1024);
@@ -1635,7 +1743,9 @@ async function handleGitHubWebhook(req, res, slug, config) {
   res.end(JSON.stringify({ success: true, message: 'Deploy triggered' }));
 
   try {
-    const { commit, size } = deployFromGit(slug, site.repo_url, site.branch || 'main');
+    const owner = db.getUserById(site.user_id);
+    const maxBytes = Math.min(MAX_EXTRACTED_SIZE, Math.max(0, storageHeadroom(owner, site)));
+    const { commit, size } = deployFromGit(slug, site.repo_url, site.branch || 'main', { maxBytes });
     db.updateSite(slug, { last_commit: commit, size });
     console.log(`[github-webhook] Deployed ${slug} from GitHub (${commit.slice(0, 7)})`);
   } catch (err) {

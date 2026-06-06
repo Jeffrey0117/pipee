@@ -44,6 +44,16 @@ function loadConfig() {
     jwtSecret: config.jwtSecret || 'change-this-to-a-random-string',
     maxSites: config.maxSites || 10,
     maxSiteSize: config.maxSiteSize || 52428800,
+    // Trust CF-Connecting-IP / X-Forwarded-For for rate limiting. Set false
+    // in config.json ONLY if the server is exposed directly (no proxy/CDN),
+    // otherwise spoofed headers could rotate rate-limit identities.
+    trustProxy: config.trustProxy !== false,
+    turnstile: {
+      // Cloudflare Turnstile bot gate on registration. Both empty => disabled.
+      siteKey: (config.turnstile && config.turnstile.siteKey) || '',
+      secret: process.env.TURNSTILE_SECRET
+        || (config.turnstile && config.turnstile.secret) || '',
+    },
     gitea: config.gitea || {},
     paygate: {
       product: (config.paygate && config.paygate.product) || 'pipee',

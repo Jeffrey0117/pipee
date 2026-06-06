@@ -292,6 +292,7 @@
         <div class="auth-error hidden" id="auth-error"></div>
         <input type="text" id="auth-username" placeholder="Username" autocomplete="username">
         <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
+        <div id="turnstile-slot" class="hidden" style="margin:0.25rem 0"></div>
         <button class="btn-auth" id="btn-auth" onclick="doAuth()">Login</button>
         <div class="auth-toggle">
           <span id="auth-toggle-text" data-i18n="console.noAccount">No account?</span>
@@ -410,6 +411,7 @@
     'console.deploy.failed': { en: 'Deploy failed', zh: '部署失敗' },
     'console.deploy.verifyEmail': { en: 'Please verify your email before creating a site. Add or confirm your email, then click the link we send you.', zh: '建立網站前請先驗證 email。請新增或確認你的 email,並點擊我們寄出的驗證連結。' },
     'console.upload.invalidType': { en: 'Please upload a .zip file', zh: '請上傳 .zip 檔案' },
+    'console.captchaRequired': { en: 'Please complete the verification challenge first.', zh: '請先完成人機驗證。' },
     'console.noAccount': { en: 'No account?', zh: '沒有帳號？' },
     'console.hasAccount': { en: 'Already have an account?', zh: '已有帳號？' },
     'console.register': { en: 'Register', zh: '註冊' },
@@ -519,6 +521,53 @@
     const $deployStatus = document.getElementById('deploy-status');
     const $authError = document.getElementById('auth-error');
 
+    // ── Turnstile (bot gate on register; active only when server has a site key) ──
+    let turnstileSiteKey = null;
+    let turnstileWidgetId = null;
+    let turnstileScriptRequested = false;
+
+    async function loadPublicConfig() {
+      try {
+        const resp = await fetch('/api/config');
+        if (resp.ok) {
+          const data = await resp.json();
+          turnstileSiteKey = data.turnstile_site_key || null;
+        }
+      } catch { /* captcha disabled */ }
+      if (isRegisterMode) ensureTurnstile();
+    }
+
+    function ensureTurnstile() {
+      if (!turnstileSiteKey) return;
+      document.getElementById('turnstile-slot').classList.remove('hidden');
+      if (turnstileWidgetId !== null) return;
+      if (window.turnstile) return window.__renderTurnstile();
+      if (turnstileScriptRequested) return;
+      turnstileScriptRequested = true;
+      const s = document.createElement('script');
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=__renderTurnstile&render=explicit';
+      s.async = true;
+      s.defer = true;
+      document.head.appendChild(s);
+    }
+
+    window.__renderTurnstile = function() {
+      if (turnstileWidgetId !== null || !turnstileSiteKey || !window.turnstile) return;
+      turnstileWidgetId = window.turnstile.render('#turnstile-slot', {
+        sitekey: turnstileSiteKey,
+        theme: document.documentElement.classList.contains('light') ? 'light' : 'dark',
+      });
+    };
+
+    function getTurnstileToken() {
+      if (!window.turnstile || turnstileWidgetId === null) return '';
+      return window.turnstile.getResponse(turnstileWidgetId) || '';
+    }
+
+    function resetTurnstile() {
+      if (window.turnstile && turnstileWidgetId !== null) window.turnstile.reset(turnstileWidgetId);
+    }
+
     // ── Auth ──
     function toggleAuthMode() {
       isRegisterMode = !isRegisterMode;
@@ -526,6 +575,11 @@
       document.getElementById('auth-toggle-text').textContent = isRegisterMode ? t('console.hasAccount') : t('console.noAccount');
       document.getElementById('auth-toggle-link').textContent = isRegisterMode ? t('console.login') : t('console.register');
       $authError.classList.add('hidden');
+      if (isRegisterMode) {
+        ensureTurnstile();
+      } else {
+        document.getElementById('turnstile-slot').classList.add('hidden');
+      }
     }
 
     async function doAuth() {
@@ -536,16 +590,28 @@
       $authError.classList.add('hidden');
       const endpoint = isRegisterMode ? '/api/auth/register' : '/api/auth/login';
 
+      const payload = { username, password };
+      if (isRegisterMode && turnstileSiteKey) {
+        const captchaToken = getTurnstileToken();
+        if (!captchaToken) {
+          $authError.textContent = t('console.captchaRequired');
+          $authError.classList.remove('hidden');
+          return;
+        }
+        payload.turnstile_token = captchaToken;
+      }
+
       try {
         const resp = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify(payload),
         });
         const data = await resp.json();
         if (!resp.ok) {
           $authError.textContent = data.error || 'Error';
           $authError.classList.remove('hidden');
+          if (isRegisterMode) resetTurnstile();
           return;
         }
         authToken = data.token;
@@ -566,6 +632,7 @@
 
     // ── Init ──
     async function init() {
+      loadPublicConfig();
       authToken = localStorage.getItem('pipee_token');
       if (authToken) {
         try {

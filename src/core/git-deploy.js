@@ -17,7 +17,7 @@ function ensureGitCache() {
   }
 }
 
-function deployFromGit(slug, repoUrl, branch = 'main') {
+function deployFromGit(slug, repoUrl, branch = 'main', opts = {}) {
   ensureGitCache();
 
   const cacheDir = path.join(GIT_CACHE_DIR, slug);
@@ -47,10 +47,24 @@ function deployFromGit(slug, repoUrl, branch = 'main') {
     throw new Error('NO_INDEX_HTML');
   }
 
+  const size = swapIntoPlace(slug, cacheDir, opts.maxBytes);
+
+  return { commit, size };
+}
+
+// Copy the checked-out tree (sans .git) to a temp dir, enforce the size cap
+// BEFORE swapping so an oversized repo never goes live, then atomically swap.
+function swapIntoPlace(slug, cacheDir, maxBytes) {
   const siteDir = path.join(STATIC_DIR, slug);
   const tempDir = path.join(STATIC_DIR, `.tmp-git-${slug}-${Date.now()}`);
 
   copyDirExcludeGit(cacheDir, tempDir);
+
+  const size = getDirSize(tempDir);
+  if (maxBytes !== undefined && size > maxBytes) {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    throw new Error('SITE_TOO_LARGE');
+  }
 
   const oldDir = path.join(STATIC_DIR, `.old-${slug}-${Date.now()}`);
   if (fs.existsSync(siteDir)) {
@@ -70,9 +84,7 @@ function deployFromGit(slug, repoUrl, branch = 'main') {
     }, 1000);
   }
 
-  const size = getDirSize(siteDir);
-
-  return { commit, size };
+  return size;
 }
 
 function copyDirExcludeGit(src, dest) {
@@ -104,7 +116,7 @@ function getDirSize(dir) {
   return size;
 }
 
-function deployFromGitAtSha(slug, repoUrl, sha) {
+function deployFromGitAtSha(slug, repoUrl, sha, opts = {}) {
   if (!/^[0-9a-f]{7,40}$/i.test(sha)) {
     throw new Error('INVALID_SHA');
   }
@@ -141,29 +153,7 @@ function deployFromGitAtSha(slug, repoUrl, sha) {
     throw new Error('NO_INDEX_HTML');
   }
 
-  const siteDir = path.join(STATIC_DIR, slug);
-  const tempDir = path.join(STATIC_DIR, `.tmp-git-${slug}-${Date.now()}`);
-  copyDirExcludeGit(cacheDir, tempDir);
-
-  const oldDir = path.join(STATIC_DIR, `.old-${slug}-${Date.now()}`);
-  if (fs.existsSync(siteDir)) {
-    fs.renameSync(siteDir, oldDir);
-  }
-  try {
-    fs.renameSync(tempDir, siteDir);
-  } catch (err) {
-    if (fs.existsSync(oldDir)) {
-      try { fs.renameSync(oldDir, siteDir); } catch { /* best effort */ }
-    }
-    throw err;
-  }
-  if (fs.existsSync(oldDir)) {
-    setTimeout(() => {
-      try { fs.rmSync(oldDir, { recursive: true, force: true }); } catch { /* ignore */ }
-    }, 1000);
-  }
-
-  const size = getDirSize(siteDir);
+  const size = swapIntoPlace(slug, cacheDir, opts.maxBytes);
   return { commit, size };
 }
 
