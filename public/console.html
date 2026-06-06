@@ -408,6 +408,7 @@
     'console.deploy.uploading': { en: 'Uploading and deploying...', zh: '正在上傳與部署...' },
     'console.deploy.success': { en: 'Deployed!', zh: '部署成功！' },
     'console.deploy.failed': { en: 'Deploy failed', zh: '部署失敗' },
+    'console.deploy.verifyEmail': { en: 'Please verify your email before creating a site. Add or confirm your email, then click the link we send you.', zh: '建立網站前請先驗證 email。請新增或確認你的 email,並點擊我們寄出的驗證連結。' },
     'console.upload.invalidType': { en: 'Please upload a .zip file', zh: '請上傳 .zip 檔案' },
     'console.noAccount': { en: 'No account?', zh: '沒有帳號？' },
     'console.hasAccount': { en: 'Already have an account?', zh: '已有帳號？' },
@@ -1315,6 +1316,18 @@
         });
         var createData = null;
         try { createData = await createResp.json(); } catch { /* ignore */ }
+
+        // Stop on create errors other than "slug already taken" (409, which is
+        // fine — we just deploy to the existing site). Free accounts must
+        // verify their email before they can host anything.
+        if (!createResp.ok && createResp.status !== 409) {
+          if (createData && createData.code === 'EMAIL_NOT_VERIFIED') {
+            showStatus('error', t('console.deploy.verifyEmail'));
+          } else {
+            showStatus('error', (createData && createData.error) || t('console.deploy.failed'));
+          }
+          return;
+        }
 
         // Deploy
         var arrayBuffer = await selectedFile.arrayBuffer();

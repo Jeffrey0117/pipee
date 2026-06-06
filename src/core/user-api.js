@@ -857,6 +857,16 @@ async function handleCreateSite(req, res, config) {
 
   const { user } = result;
 
+  // Anti-abuse: free-plan accounts must verify their email before they can
+  // host anything. One verified email = one hosting-capable free account
+  // (verified emails are uniquely indexed), which stops scripted mass
+  // sign-ups from being used as free CDN/storage. Paid/creator accounts are
+  // already email-verified via PayGate, so they're exempt.
+  const plan = effectivePlan(user);
+  if (plan === 'free' && !user.email_verified) {
+    return jsonErr(res, 'Please verify your email before creating a site.', 'EMAIL_NOT_VERIFIED', 403);
+  }
+
   // Check if slug already exists
   const existing = db.getSite(slug);
   if (existing) {
@@ -864,7 +874,7 @@ async function handleCreateSite(req, res, config) {
   }
 
   // Quota check (plan-based)
-  const planConfig = PLANS[effectivePlan(user)] || PLANS.free;
+  const planConfig = PLANS[plan] || PLANS.free;
   const count = db.countSitesByUser(user.id);
   if (count >= planConfig.maxSites) {
     return jsonErr(res, `Site limit reached (${planConfig.maxSites}). Upgrade your plan or delete a site.`, 'QUOTA_EXCEEDED', 402);
