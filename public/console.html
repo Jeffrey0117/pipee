@@ -194,6 +194,19 @@
     .diff-line.hdr { color: var(--blue); font-weight: 600; background: rgba(96,165,250,0.05); }
     .diff-line.file { color: var(--text); font-weight: 700; background: rgba(148,148,172,0.08); padding-top: 0.5rem; border-top: 1px solid var(--border); }
 
+    /* Data API */
+    .data-panel { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+    .data-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+    .data-panel-title { font-size: 0.85rem; font-weight: 700; color: var(--accent); }
+    .data-intro { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 0.75rem; }
+    .data-quota { font-size: 0.72rem; color: var(--text-muted); margin: 0.5rem 0; }
+    .data-section-label { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 0.85rem 0 0.4rem; }
+    .data-rules-editor { width: 100%; min-height: 120px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.75rem; font-family: var(--mono); font-size: 0.75rem; line-height: 1.5; color: var(--text); resize: vertical; box-sizing: border-box; }
+    .data-rules-editor:focus { outline: none; border-color: var(--accent); }
+    .data-hint { font-size: 0.68rem; color: var(--text-muted); margin-top: 0.35rem; line-height: 1.45; }
+    .data-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; }
+    .data-snippet { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.75rem; font-family: var(--mono); font-size: 0.72rem; line-height: 1.55; color: var(--text); overflow-x: auto; margin: 0; }
+
     /* AI Editor */
     .btn-ai { padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: 1px solid rgba(124,58,237,0.3); background: rgba(124,58,237,0.08); color: var(--accent); font-family: var(--font); transition: all 0.2s; }
     .btn-ai:hover { background: rgba(124,58,237,0.18); border-color: var(--accent); color: var(--accent-bright); }
@@ -475,6 +488,23 @@
     'upgrade.resend': { en: 'Resend link', zh: '重新寄送' },
     'upgrade.verified': { en: "I've verified — continue", zh: '我已驗證，繼續' },
     'upgrade.notYetVerified': { en: 'Not verified yet — check your inbox and click the link first.', zh: '尚未驗證——請先到信箱點擊驗證連結。' },
+    'console.data.btn': { en: 'Database', zh: '資料庫' },
+    'console.data.title': { en: 'Database (Data API)', zh: '資料庫 (Data API)' },
+    'console.data.intro': { en: 'Give this site a backend: store form submissions, comments, or any JSON over a simple REST API. Enable it to get an API key.', zh: '給這個網站一個後端：用簡單的 REST API 儲存表單、留言或任何 JSON 資料。開啟後會拿到 API 金鑰。' },
+    'console.data.enable': { en: 'Enable Data API', zh: '開啟資料庫' },
+    'console.data.endpoint': { en: 'Endpoint', zh: '端點' },
+    'console.data.apiKey': { en: 'API Key', zh: 'API 金鑰' },
+    'console.data.records': { en: 'Records used:', zh: '已使用筆數：' },
+    'console.data.rules': { en: 'Access rules', zh: '存取規則' },
+    'console.data.rulesHint': { en: 'Per collection set read/write to "public" or "none". Visitors writing to "submissions" works by default. "_default" applies to unlisted collections.', zh: '每個 collection 的 read/write 可設 "public" 或 "none"。預設訪客可寫入 "submissions"。"_default" 套用到未列出的 collection。' },
+    'console.data.saveRules': { en: 'Save rules', zh: '儲存規則' },
+    'console.data.saved': { en: 'Saved!', zh: '已儲存！' },
+    'console.data.rotate': { en: 'Rotate key', zh: '更換金鑰' },
+    'console.data.rotateConfirm': { en: 'Rotate the API key? The old key stops working immediately and you must update your site code.', zh: '更換 API 金鑰？舊金鑰會立即失效，你必須更新網站程式碼。' },
+    'console.data.disable': { en: 'Disable', zh: '停用' },
+    'console.data.disableConfirm': { en: 'Disable the Data API? The key stops working. Your records are kept and reappear if you re-enable.', zh: '停用資料庫？金鑰會失效。資料會保留，重新開啟後會回來。' },
+    'console.data.usage': { en: 'Example', zh: '使用範例' },
+    'console.data.badJson': { en: 'Rules must be valid JSON', zh: '規則必須是有效的 JSON' },
     'time.justNow': { en: 'just now', zh: '剛剛' },
     'time.m': { en: 'm ago', zh: '分鐘前' },
     'time.h': { en: 'h ago', zh: '小時前' },
@@ -992,6 +1022,13 @@
           gitDashBtn.innerHTML = t('console.git.dashboard.btn') + ' <span class="pro-badge">' + escapeHtml(currentUser.plan_label || 'PRO') + '</span>';
           gitDashBtn.addEventListener('click', function() { toggleGitDashboard(s.slug, card); });
           right.appendChild(gitDashBtn);
+        }
+        // Data API button (Pro+ only)
+        if (currentUser && currentUser.data_enabled) {
+          var dataBtn = document.createElement('button'); dataBtn.className = 'btn-ai';
+          dataBtn.innerHTML = t('console.data.btn') + ' <span class="pro-badge">' + escapeHtml(currentUser.plan_label || 'PRO') + '</span>';
+          dataBtn.addEventListener('click', function() { toggleDataPanel(s.slug, card); });
+          right.appendChild(dataBtn);
         }
         var delBtn = document.createElement('button'); delBtn.className = 'btn-delete'; delBtn.textContent = t('console.delete');
         delBtn.addEventListener('click', function() { deleteSite(s.slug); });
@@ -1589,6 +1626,191 @@
 
     // ── Git Dashboard ──
     var gitDashOpenSlug = null;
+
+    // ── Data API panel ──
+    var dataOpenSlug = null;
+
+    function toggleDataPanel(slug, card) {
+      var existing = card.querySelector('.data-panel');
+      if (existing) {
+        existing.remove();
+        if (dataOpenSlug === slug) { dataOpenSlug = null; return; }
+      }
+      dataOpenSlug = slug;
+
+      var panel = document.createElement('div');
+      panel.className = 'data-panel';
+      panel.innerHTML =
+        '<div class="data-panel-header">' +
+          '<span class="data-panel-title">' + escapeHtml(t('console.data.title')) + '</span>' +
+          '<button class="btn-git" onclick="closeDataPanel(this)">' + escapeHtml(t('console.git.diff.close')) + '</button>' +
+        '</div>' +
+        '<div class="data-body" id="data-body-' + slug + '">' +
+          '<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.82rem">' + escapeHtml(t('console.git.loading')) + '</div>' +
+        '</div>';
+      card.appendChild(panel);
+      loadDataPanel(slug);
+    }
+
+    function closeDataPanel(btn) {
+      var panel = btn.closest('.data-panel');
+      if (panel) panel.remove();
+      dataOpenSlug = null;
+    }
+
+    function dataErrBox(msg) {
+      return '<div style="text-align:center;padding:1rem;color:var(--red);font-size:0.82rem">' + escapeHtml(msg) + '</div>';
+    }
+
+    // A label + copyable value row, reusing the git clone-url styling.
+    function dataCopyRow(label, value) {
+      var wrap = document.createElement('div'); wrap.className = 'clone-url-wrap';
+      var lab = document.createElement('span'); lab.className = 'clone-url-label'; lab.textContent = label;
+      var txt = document.createElement('span'); txt.className = 'clone-url-text'; txt.textContent = value; txt.title = value;
+      var btn = document.createElement('button'); btn.className = 'btn-copy'; btn.textContent = 'Copy';
+      btn.addEventListener('click', function() { copyToClipboard(value, btn); });
+      txt.addEventListener('click', function() { copyToClipboard(value, btn); });
+      wrap.appendChild(lab); wrap.appendChild(txt); wrap.appendChild(btn);
+      return wrap;
+    }
+
+    async function loadDataPanel(slug) {
+      var body = document.getElementById('data-body-' + slug);
+      if (!body) return;
+      try {
+        var resp = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/data', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        var data = await resp.json();
+        if (!resp.ok) { body.innerHTML = dataErrBox(data.error || 'Error'); return; }
+        renderDataPanel(slug, body, data);
+      } catch (err) {
+        body.innerHTML = dataErrBox(err.message);
+      }
+    }
+
+    function renderDataPanel(slug, body, data) {
+      body.innerHTML = '';
+
+      if (!data.enabled) {
+        var intro = document.createElement('div');
+        intro.className = 'data-intro';
+        intro.textContent = t('console.data.intro');
+        body.appendChild(intro);
+        var enableBtn = document.createElement('button');
+        enableBtn.className = 'btn-ai';
+        enableBtn.textContent = t('console.data.enable');
+        enableBtn.addEventListener('click', function() { enableData(slug); });
+        body.appendChild(enableBtn);
+        return;
+      }
+
+      body.appendChild(dataCopyRow(t('console.data.endpoint'), data.endpoint));
+      body.appendChild(dataCopyRow(t('console.data.apiKey'), data.apiKey));
+
+      var quota = document.createElement('div');
+      quota.className = 'data-quota';
+      quota.textContent = t('console.data.records') + ' ' + data.recordCount + ' / ' + data.maxRecords;
+      body.appendChild(quota);
+
+      var rulesLabel = document.createElement('div');
+      rulesLabel.className = 'data-section-label';
+      rulesLabel.textContent = t('console.data.rules');
+      body.appendChild(rulesLabel);
+
+      var ta = document.createElement('textarea');
+      ta.className = 'data-rules-editor';
+      ta.value = JSON.stringify(data.rules || {}, null, 2);
+      ta.spellcheck = false;
+      body.appendChild(ta);
+
+      var hint = document.createElement('div');
+      hint.className = 'data-hint';
+      hint.textContent = t('console.data.rulesHint');
+      body.appendChild(hint);
+
+      var actions = document.createElement('div');
+      actions.className = 'data-actions';
+      var saveBtn = document.createElement('button'); saveBtn.className = 'btn-ai'; saveBtn.textContent = t('console.data.saveRules');
+      saveBtn.addEventListener('click', function() { saveDataRules(slug, ta, saveBtn); });
+      var rotateBtn = document.createElement('button'); rotateBtn.className = 'btn-git'; rotateBtn.textContent = t('console.data.rotate');
+      rotateBtn.addEventListener('click', function() { rotateDataKey(slug); });
+      var disableBtn = document.createElement('button'); disableBtn.className = 'btn-git'; disableBtn.textContent = t('console.data.disable');
+      disableBtn.addEventListener('click', function() { disableData(slug); });
+      actions.appendChild(saveBtn); actions.appendChild(rotateBtn); actions.appendChild(disableBtn);
+      body.appendChild(actions);
+
+      var usageLabel = document.createElement('div');
+      usageLabel.className = 'data-section-label';
+      usageLabel.textContent = t('console.data.usage');
+      body.appendChild(usageLabel);
+      var pre = document.createElement('pre');
+      pre.className = 'data-snippet';
+      pre.textContent =
+        "fetch('" + data.endpoint + "/submissions', {\n" +
+        "  method: 'POST',\n" +
+        "  headers: {\n" +
+        "    'content-type': 'application/json',\n" +
+        "    'x-pipee-key': '" + data.apiKey + "'\n" +
+        "  },\n" +
+        "  body: JSON.stringify({ name: 'Ada', message: 'hi' })\n" +
+        "});";
+      body.appendChild(pre);
+    }
+
+    async function enableData(slug) {
+      try {
+        var resp = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/data/enable', {
+          method: 'POST', headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        var data = await resp.json();
+        if (!resp.ok) { alert(data.error || 'Error'); return; }
+        loadDataPanel(slug);
+      } catch (err) { alert(err.message); }
+    }
+
+    async function rotateDataKey(slug) {
+      if (!confirm(t('console.data.rotateConfirm'))) return;
+      try {
+        var resp = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/data/rotate-key', {
+          method: 'POST', headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        var data = await resp.json();
+        if (!resp.ok) { alert(data.error || 'Error'); return; }
+        loadDataPanel(slug);
+      } catch (err) { alert(err.message); }
+    }
+
+    async function disableData(slug) {
+      if (!confirm(t('console.data.disableConfirm'))) return;
+      try {
+        var resp = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/data', {
+          method: 'DELETE', headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        if (!resp.ok) { var d = await resp.json(); alert(d.error || 'Error'); return; }
+        loadDataPanel(slug);
+      } catch (err) { alert(err.message); }
+    }
+
+    async function saveDataRules(slug, ta, btn) {
+      var rules;
+      try { rules = JSON.parse(ta.value); }
+      catch (e) { alert(t('console.data.badJson')); return; }
+      var orig = btn.textContent;
+      btn.textContent = t('upgrade.saving');
+      try {
+        var resp = await fetch('/api/user/sites/' + encodeURIComponent(slug) + '/data/rules', {
+          method: 'PUT',
+          headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rules: rules }),
+        });
+        var data = await resp.json();
+        if (!resp.ok) { alert(data.error || 'Error'); btn.textContent = orig; return; }
+        ta.value = JSON.stringify(data.rules || {}, null, 2);
+        btn.textContent = t('console.data.saved');
+        setTimeout(function() { btn.textContent = orig; }, 1200);
+      } catch (err) { alert(err.message); btn.textContent = orig; }
+    }
 
     function toggleGitDashboard(slug, card) {
       var existing = card.querySelector('.git-dashboard');

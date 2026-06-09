@@ -641,6 +641,7 @@ function handleMe(req, res, config) {
       ai_edits_limit: planConfig.aiEditsPerMonth,
       ai_enabled: AI_ALLOWED_PLANS.has(plan),
       git_dashboard_enabled: GIT_DASHBOARD_PLANS.has(plan),
+      data_enabled: DATA_PLANS.has(plan),
       sub_expires_at: user.sub_expires_at || null,
       sub_active: subscriptionActive(user),
     },
