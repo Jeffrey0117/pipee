@@ -16,10 +16,10 @@ const MB = 1024 * 1024;
 const GB = 1024 * MB;
 
 const PLANS = {
-  //                                                         total deployed bytes      bytes served per site per day
-  free:    { maxSites: 3,   aiEditsPerMonth: 0,   label: 'Free',    maxStorageBytes: 150 * MB, bandwidthPerDayBytes: 1 * GB },
-  pro:     { maxSites: 20,  aiEditsPerMonth: 200,  label: 'Pro',     maxStorageBytes: 2 * GB,   bandwidthPerDayBytes: 10 * GB },
-  creator: { maxSites: 100, aiEditsPerMonth: 9999, label: 'Creator', maxStorageBytes: 10 * GB,  bandwidthPerDayBytes: 50 * GB },
+  //                                                         total deployed bytes      bytes served per site per day   data records (BaaS)
+  free:    { maxSites: 3,   aiEditsPerMonth: 0,   label: 'Free',    maxStorageBytes: 150 * MB, bandwidthPerDayBytes: 1 * GB,  maxDataRecords: 0 },
+  pro:     { maxSites: 20,  aiEditsPerMonth: 200,  label: 'Pro',     maxStorageBytes: 2 * GB,   bandwidthPerDayBytes: 10 * GB, maxDataRecords: 10000 },
+  creator: { maxSites: 100, aiEditsPerMonth: 9999, label: 'Creator', maxStorageBytes: 10 * GB,  bandwidthPerDayBytes: 50 * GB, maxDataRecords: 100000 },
 };
 
 // ── Plan resolution ──
@@ -61,6 +61,7 @@ function getDb() {
   migrateGitFields(_db);
   migrateAiFields(_db);
   migrateSubscriptionFields(_db);
+  migrateDataFields(_db);
   promoteAdmin(_db);
 
   return _db;
@@ -158,6 +159,41 @@ function migrateGitFields(db) {
   if (!columns.includes('deploy_method')) {
     db.exec("ALTER TABLE sites ADD COLUMN deploy_method TEXT DEFAULT 'upload'");
   }
+}
+
+// ── Data API (BaaS) migration ────────────────
+// Per-site datastore for paid plans. `data_api_key` (null = disabled) is the
+// public key visitors present; `data_rules` is the JSON per-collection
+// read/write policy. Records live in a single `site_data` table keyed by slug.
+
+function migrateDataFields(db) {
+  const columns = db.prepare("PRAGMA table_info(sites)").all().map(c => c.name);
+
+  if (!columns.includes('data_api_key')) {
+    db.exec("ALTER TABLE sites ADD COLUMN data_api_key TEXT DEFAULT NULL");
+  }
+  if (!columns.includes('data_rules')) {
+    db.exec("ALTER TABLE sites ADD COLUMN data_rules TEXT DEFAULT '{}'");
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS site_data (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT NOT NULL,
+      collection TEXT NOT NULL,
+      record_id TEXT NOT NULL,
+      data TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (slug) REFERENCES sites(slug)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_site_data
+      ON site_data(slug, collection, created_at);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_site_data_rec
+      ON site_data(slug, collection, record_id);
+  `);
 }
 
 // ── Admin auto-promotion ──────────────────────
@@ -259,7 +295,7 @@ function createSite({ slug, userId }) {
 
 function updateSite(slug, fields) {
   const db = getDb();
-  const allowed = ['config', 'size', 'repo_url', 'branch', 'last_commit', 'deploy_method'];
+  const allowed = ['config', 'size', 'repo_url', 'branch', 'last_commit', 'deploy_method', 'data_api_key', 'data_rules'];
   const sets = [];
   const values = [];
   for (const key of allowed) {
@@ -327,6 +363,72 @@ function listAllUsersWithSites() {
   return Array.from(byUser.values());
 }
 
+// ── Site data records (BaaS) ──────────────────
+// JSON documents stored under (slug, collection, record_id). `data` is the
+// JSON-stringified record body; rowToRecord parses it back for callers.
+
+function rowToRecord(row) {
+  let data = {};
+  try { data = JSON.parse(row.data); } catch { /* keep {} on corruption */ }
+  return { id: row.record_id, data, created_at: row.created_at, updated_at: row.updated_at };
+}
+
+function createRecord({ slug, collection, recordId, data }) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.prepare(
+    'INSERT INTO site_data (slug, collection, record_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(slug, collection, recordId, JSON.stringify(data ?? null), now, now);
+  return getRecord(slug, collection, recordId);
+}
+
+function getRecord(slug, collection, recordId) {
+  const db = getDb();
+  const row = db.prepare(
+    'SELECT * FROM site_data WHERE slug = ? AND collection = ? AND record_id = ?'
+  ).get(slug, collection, recordId);
+  return row ? rowToRecord(row) : null;
+}
+
+function listRecords(slug, collection, { limit = 50, offset = 0 } = {}) {
+  const db = getDb();
+  const rows = db.prepare(
+    'SELECT * FROM site_data WHERE slug = ? AND collection = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?'
+  ).all(slug, collection, limit, offset);
+  return rows.map(rowToRecord);
+}
+
+function updateRecord(slug, collection, recordId, data) {
+  const db = getDb();
+  const result = db.prepare(
+    'UPDATE site_data SET data = ?, updated_at = ? WHERE slug = ? AND collection = ? AND record_id = ?'
+  ).run(JSON.stringify(data ?? null), new Date().toISOString(), slug, collection, recordId);
+  return result.changes > 0 ? getRecord(slug, collection, recordId) : null;
+}
+
+function deleteRecord(slug, collection, recordId) {
+  const db = getDb();
+  const result = db.prepare(
+    'DELETE FROM site_data WHERE slug = ? AND collection = ? AND record_id = ?'
+  ).run(slug, collection, recordId);
+  return result.changes > 0;
+}
+
+// Account-wide record count, used to enforce the plan's maxDataRecords quota.
+function countRecordsByUser(userId) {
+  const db = getDb();
+  const row = db.prepare(
+    'SELECT COUNT(*) AS c FROM site_data sd JOIN sites s ON s.slug = sd.slug WHERE s.user_id = ?'
+  ).get(userId);
+  return row.c;
+}
+
+// Drop every record for a slug (used when a site is deleted).
+function deleteRecordsBySite(slug) {
+  const db = getDb();
+  return db.prepare('DELETE FROM site_data WHERE slug = ?').run(slug).changes;
+}
+
 // ── Lifecycle ───────────────────────────────
 
 function close() {
@@ -359,6 +461,14 @@ module.exports = {
   sumSiteSizesByUser,
   getSiteOwner,
   listAllUsersWithSites,
+
+  createRecord,
+  getRecord,
+  listRecords,
+  updateRecord,
+  deleteRecord,
+  countRecordsByUser,
+  deleteRecordsBySite,
 
   close,
   DB_PATH,

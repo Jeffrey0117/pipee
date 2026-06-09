@@ -444,6 +444,33 @@ async function handle(req, res, pathname, config) {
     return handleUnlinkGitHub(req, res, unlinkGitHubMatch[1], config);
   }
 
+  // GET/DELETE /api/user/sites/:slug/data (Data API status / disable)
+  const dataInfoMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/data$/);
+  if (req.method === 'GET' && dataInfoMatch) {
+    return handleDataInfo(req, res, dataInfoMatch[1], config);
+  }
+  if (req.method === 'DELETE' && dataInfoMatch) {
+    return handleDataDisable(req, res, dataInfoMatch[1], config);
+  }
+
+  // POST /api/user/sites/:slug/data/enable (provision API key — Pro+)
+  const dataEnableMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/data\/enable$/);
+  if (req.method === 'POST' && dataEnableMatch) {
+    return handleDataEnable(req, res, dataEnableMatch[1], config);
+  }
+
+  // POST /api/user/sites/:slug/data/rotate-key (issue a fresh key)
+  const dataRotateMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/data\/rotate-key$/);
+  if (req.method === 'POST' && dataRotateMatch) {
+    return handleDataRotateKey(req, res, dataRotateMatch[1], config);
+  }
+
+  // PUT /api/user/sites/:slug/data/rules (set per-collection access rules)
+  const dataRulesMatch = pathname.match(/^\/api\/user\/sites\/([a-z0-9][a-z0-9-]*[a-z0-9])\/data\/rules$/);
+  if (req.method === 'PUT' && dataRulesMatch) {
+    return handleDataSetRules(req, res, dataRulesMatch[1], config);
+  }
+
   return jsonErr(res, 'Not found', 'NOT_FOUND', 404);
 }
 
@@ -1136,7 +1163,10 @@ async function handleDeleteSite(req, res, slug, config) {
     }
   }
 
-  // Delete DB record
+  // Drop the site's data records, then the site row itself.
+  try { db.deleteRecordsBySite(slug); } catch (err) {
+    console.error(`[pipee] Failed to delete data records for ${slug}:`, err.message);
+  }
   db.deleteSite(slug);
 
   return jsonOk(res, { deleted: true });
@@ -1667,6 +1697,138 @@ async function handleUnlinkGitHub(req, res, slug, config) {
   });
 
   return jsonOk(res, { slug, disconnected: true });
+}
+
+// ── Data API management (Pro+) ──
+// Owner-facing endpoints (JWT) to provision the per-site key, inspect status,
+// rotate the key, and set per-collection rules. The public CRUD surface lives
+// in data-api.js; these only configure it.
+
+const DATA_PLANS = new Set(['pro', 'creator']);
+
+function safeParse(str, fallback) {
+  try { return JSON.parse(str); } catch { return fallback; }
+}
+
+function generateDataKey() {
+  return 'pk_' + crypto.randomBytes(24).toString('hex');
+}
+
+// Seed rules that make a contact-form collection work out of the box: visitors
+// may write to `submissions` but read nothing; everything else is deny-all.
+function defaultDataRules() {
+  return JSON.stringify({
+    _default: { read: 'none', write: 'none' },
+    submissions: { read: 'none', write: 'public' },
+  });
+}
+
+// Normalize a client-supplied rules object: only known shapes survive, values
+// collapse to 'public'/'none', collection names are validated, and `_default`
+// is always present (deny-all when omitted).
+function sanitizeRules(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const keys = Object.keys(input);
+  if (keys.length > 50) return null;
+
+  const NAME_RE = /^(_default|[a-z0-9][a-z0-9_-]{0,63})$/;
+  const out = {};
+  for (const key of keys) {
+    if (!NAME_RE.test(key)) return null;
+    const v = input[key] || {};
+    out[key] = {
+      read: v.read === 'public' ? 'public' : 'none',
+      write: v.write === 'public' ? 'public' : 'none',
+    };
+  }
+  if (!out._default) out._default = { read: 'none', write: 'none' };
+  return out;
+}
+
+// Resolve { user, site } for an owned site, or null after ending the response.
+function requireOwnedSite(req, res, slug, config) {
+  const result = verifyUserRequest(req, config);
+  if (!result) { jsonErr(res, 'Not authenticated', 'UNAUTHORIZED', 401); return null; }
+  const site = db.getSite(slug);
+  if (!site) { jsonErr(res, 'Site not found', 'NOT_FOUND', 404); return null; }
+  if (site.user_id !== result.user.id) { jsonErr(res, 'Not your site', 'FORBIDDEN', 403); return null; }
+  return { user: result.user, site };
+}
+
+// GET /api/user/sites/:slug/data
+function handleDataInfo(req, res, slug, config) {
+  const ctx = requireOwnedSite(req, res, slug, config);
+  if (!ctx) return;
+
+  const plan = effectivePlan(ctx.user);
+  const planConfig = PLANS[plan] || PLANS.free;
+  const base = String(config.externalUrl || '').replace(/\/$/, '');
+
+  return jsonOk(res, {
+    available: DATA_PLANS.has(plan),
+    enabled: !!ctx.site.data_api_key,
+    apiKey: ctx.site.data_api_key || null,
+    rules: safeParse(ctx.site.data_rules, {}),
+    recordCount: db.countRecordsByUser(ctx.user.id),
+    maxRecords: planConfig.maxDataRecords || 0,
+    endpoint: `${base}/api/db/${slug}`,
+  });
+}
+
+// POST /api/user/sites/:slug/data/enable
+function handleDataEnable(req, res, slug, config) {
+  const ctx = requireOwnedSite(req, res, slug, config);
+  if (!ctx) return;
+  if (!DATA_PLANS.has(effectivePlan(ctx.user))) {
+    return jsonErr(res, 'Upgrade to Pro to use the Data API', 'PLAN_REQUIRED', 403);
+  }
+
+  const apiKey = ctx.site.data_api_key || generateDataKey();
+  const rules = ctx.site.data_rules && ctx.site.data_rules !== '{}'
+    ? ctx.site.data_rules
+    : defaultDataRules();
+  db.updateSite(slug, { data_api_key: apiKey, data_rules: rules });
+
+  return jsonOk(res, { apiKey, rules: safeParse(rules, {}) });
+}
+
+// POST /api/user/sites/:slug/data/rotate-key
+function handleDataRotateKey(req, res, slug, config) {
+  const ctx = requireOwnedSite(req, res, slug, config);
+  if (!ctx) return;
+  if (!ctx.site.data_api_key) return jsonErr(res, 'Data API not enabled', 'NOT_ENABLED', 400);
+
+  const apiKey = generateDataKey();
+  db.updateSite(slug, { data_api_key: apiKey });
+  return jsonOk(res, { apiKey });
+}
+
+// PUT /api/user/sites/:slug/data/rules
+async function handleDataSetRules(req, res, slug, config) {
+  const ctx = requireOwnedSite(req, res, slug, config);
+  if (!ctx) return;
+  if (!ctx.site.data_api_key) return jsonErr(res, 'Data API not enabled', 'NOT_ENABLED', 400);
+
+  let body;
+  try {
+    body = JSON.parse((await collectBody(req, 16384)).toString('utf8') || '{}');
+  } catch {
+    return jsonErr(res, 'Invalid JSON', 'BAD_JSON', 400);
+  }
+
+  const rules = sanitizeRules(body && body.rules);
+  if (!rules) return jsonErr(res, 'Invalid rules', 'BAD_RULES', 400);
+
+  db.updateSite(slug, { data_rules: JSON.stringify(rules) });
+  return jsonOk(res, { rules });
+}
+
+// DELETE /api/user/sites/:slug/data (disable; records are kept)
+function handleDataDisable(req, res, slug, config) {
+  const ctx = requireOwnedSite(req, res, slug, config);
+  if (!ctx) return;
+  db.updateSite(slug, { data_api_key: null });
+  return jsonOk(res, { enabled: false });
 }
 
 // ── POST /api/webhook/github/:slug (GitHub push -> auto deploy) ──

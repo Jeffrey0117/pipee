@@ -11,6 +11,7 @@ const path = require('path');
 const { handleSite, MIME } = require('./static');
 const userApi = require('./user-api');
 const gitProxy = require('./git-proxy');
+const dataApi = require('./data-api');
 
 const ROOT = path.join(__dirname, '../..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -125,6 +126,11 @@ async function handleRequest(req, res) {
   // ── Git proxy ──
   if (pathname.startsWith('/git/')) {
     return gitProxy.handle(req, res);
+  }
+
+  // ── Data API (BaaS for paid plans) — must precede generic /api/ ──
+  if (pathname.startsWith('/api/db/') || req.method === 'OPTIONS' && pathname.startsWith('/api/db')) {
+    return dataApi.handle(req, res, pathname, config);
   }
 
   // ── API routes ──
