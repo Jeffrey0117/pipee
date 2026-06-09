@@ -43,6 +43,10 @@ const RECORD_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const RATE = {
   read:  { max: 120, windowMs: 60 * 1000 },
   write: { max: 30,  windowMs: 60 * 1000 },
+  // The public key lives in front-end JS by design, so it can be harvested.
+  // This per-site aggregate write cap (IP-independent) is the flood backstop:
+  // distributed spam can't burn the whole record quota in seconds.
+  siteWrite: { max: 300, windowMs: 60 * 1000 },
 };
 
 // ── HTTP helpers ──
@@ -168,6 +172,14 @@ async function handle(req, res, pathname, config) {
   const rl = rateLimit(`db:${isWrite ? 'w' : 'r'}:${slug}:${ip}`, policy.max, policy.windowMs);
   if (!rl.allowed) {
     return json(res, 429, { error: 'Too many requests', code: 'RATE_LIMITED' }, { 'retry-after': String(rl.retryAfterSec) });
+  }
+
+  // Per-site aggregate write flood backstop (IP-independent).
+  if (isWrite) {
+    const sl = rateLimit(`db:wsite:${slug}`, RATE.siteWrite.max, RATE.siteWrite.windowMs);
+    if (!sl.allowed) {
+      return json(res, 429, { error: 'This site is receiving too many writes. Try again shortly.', code: 'SITE_RATE_LIMITED' }, { 'retry-after': String(sl.retryAfterSec) });
+    }
   }
 
   const rule = resolveRule(site.data_rules, collection);
