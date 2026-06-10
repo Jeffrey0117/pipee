@@ -45,3 +45,18 @@ test('zipFolder: throws without index.html', () => {
   fs.writeFileSync(path.join(dir, 'about.html'), 'x');
   assert.throws(() => zipFolder(dir), /index\.html/);
 });
+
+test('zipFolder: a single .html file becomes index.html', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipee-zip-'));
+  const file = path.join(dir, 'landing.html');
+  fs.writeFileSync(file, '<h1>solo</h1>');
+  const names = new AdmZip(zipFolder(file)).getEntries().map((e) => e.entryName);
+  assert.deepStrictEqual(names, ['index.html']);
+});
+
+test('zipFolder: a single non-html file is rejected', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipee-zip-'));
+  const file = path.join(dir, 'script.js');
+  fs.writeFileSync(file, '0');
+  assert.throws(() => zipFolder(file), /\.html/);
+});

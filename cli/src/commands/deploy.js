@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const api = require('../api');
 const config = require('../config');
@@ -11,7 +12,9 @@ module.exports = async function deploy(pos, flags) {
     return 1;
   }
 
-  const dir = path.resolve(pos[0] || '.');
+  const target = path.resolve(pos[0] || '.');
+  // pipee.json lives next to a single-file target, in the folder otherwise.
+  const dir = fs.existsSync(target) && fs.statSync(target).isFile() ? path.dirname(target) : target;
   const projectCfg = config.readProjectConfig(dir);
   const slug = flags.site || projectCfg.site;
   if (!slug) {
@@ -21,13 +24,13 @@ module.exports = async function deploy(pos, flags) {
 
   let buffer;
   try {
-    buffer = zipFolder(dir);
+    buffer = zipFolder(target);
   } catch (err) {
     output.error(err.message);
     return 1;
   }
 
-  if (!flags.json) output.info(`Deploying ${dir} → ${slug} (${(buffer.length / 1024).toFixed(1)} KB zipped)...`);
+  if (!flags.json) output.info(`Deploying ${target} → ${slug} (${(buffer.length / 1024).toFixed(1)} KB zipped)...`);
 
   let result;
   try {
