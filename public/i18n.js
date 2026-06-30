@@ -92,6 +92,14 @@ const T = {
   'how.step3.title': { en: 'Upload and go live', zh: '上傳即上線' },
   'how.step3.desc': { en: 'Upload a ZIP file with your static site. It\'s live instantly at your-slug.yourdomain.com.', zh: '上傳包含靜態網站的 ZIP 檔案，即時上線於 your-slug.yourdomain.com。' },
 
+  // ── Index: Showcase ──
+  'showcase.label': { en: 'From upload to live', zh: '從上傳到上線' },
+  'showcase.title': { en: 'Drop it in. Watch it launch.', zh: '丟進來，看著它上線。' },
+  'showcase.upload.title': { en: 'Upload', zh: '上傳' },
+  'showcase.upload.desc': { en: 'Drag a ZIP into the console — your files land safe in your own folder.', zh: '把 ZIP 拖進控制台，檔案就安穩落進你自己的資料夾。' },
+  'showcase.golive.title': { en: 'Go Live', zh: '上線' },
+  'showcase.golive.desc': { en: 'Seconds later your site is live on its own subdomain. No build, no waiting.', zh: '幾秒後你的網站就在專屬子網域上線，免建置、免等待。' },
+
   // ── Index: Bottom CTA ──
   'cta.ready': { en: 'Ready to host your site?', zh: '準備好託管你的網站了嗎？' },
   'cta.sub': { en: 'Self-hosted. Open source. Zero cost. Just upload and go.', zh: '自託管、開源、零成本，上傳即上線。' },
