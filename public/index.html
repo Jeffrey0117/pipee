@@ -330,52 +330,6 @@
       letter-spacing: 0.08em;
     }
 
-    /* ===== SHOWCASE ===== */
-    .showcase-section {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 0 2rem 8rem;
-    }
-    .showcase-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 1.5rem;
-    }
-    .showcase-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      overflow: hidden;
-      transition: transform 0.3s ease, border-color 0.3s ease;
-    }
-    .showcase-card:hover {
-      transform: translateY(-4px);
-      border-color: var(--border-glow);
-    }
-    .showcase-img {
-      display: block;
-      width: 100%;
-      aspect-ratio: 3 / 2;
-      object-fit: cover;
-    }
-    .showcase-body {
-      padding: 1.75rem 1.75rem 2rem;
-    }
-    .showcase-body h3 {
-      font-size: 1.15rem;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-      margin-bottom: 0.5rem;
-    }
-    .showcase-body p {
-      font-size: 0.92rem;
-      color: var(--text-dim);
-      line-height: 1.6;
-    }
-    @media (max-width: 720px) {
-      .showcase-grid { grid-template-columns: 1fr; }
-    }
-
     /* ===== FEATURES ===== */
     .features-section {
       max-width: 1100px;
@@ -576,6 +530,16 @@
       color: var(--text-muted);
       line-height: 1;
       min-width: 60px;
+    }
+    .step-content { flex: 1; }
+    .step-media {
+      flex-shrink: 0;
+      width: 200px;
+      align-self: center;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      aspect-ratio: 3 / 2;
+      object-fit: cover;
     }
     .step-content h3 {
       font-size: 1.15rem;
@@ -973,30 +937,6 @@
     </div>
   </section>
 
-  <!-- ===== SHOWCASE ===== -->
-  <section class="showcase-section">
-    <div class="section-header">
-      <div class="section-label" data-i18n="showcase.label">From upload to live</div>
-      <h2 class="section-title" data-i18n="showcase.title">Drop it in. Watch it launch.</h2>
-    </div>
-    <div class="showcase-grid">
-      <div class="showcase-card">
-        <img class="showcase-img" src="/showcase-upload.png" alt="Upload your static site" loading="lazy" width="1536" height="1024">
-        <div class="showcase-body">
-          <h3 data-i18n="showcase.upload.title">Upload</h3>
-          <p data-i18n="showcase.upload.desc">Drag a ZIP into the console — your files land safe in your own folder.</p>
-        </div>
-      </div>
-      <div class="showcase-card">
-        <img class="showcase-img" src="/showcase-golive.png" alt="Your site goes live" loading="lazy" width="1536" height="1024">
-        <div class="showcase-body">
-          <h3 data-i18n="showcase.golive.title">Go Live</h3>
-          <p data-i18n="showcase.golive.desc">Seconds later your site is live on its own subdomain. No build, no waiting.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- ===== FEATURES ===== -->
   <section class="features-section">
     <div class="section-header">
@@ -1118,6 +1058,7 @@
           <h3 data-i18n="how.step2.title">Register and create a site</h3>
           <p data-i18n="how.step2.desc">Open the console, register an account, and create a site with a unique slug like "my-blog".</p>
         </div>
+        <img class="step-media" src="/showcase-upload.png" alt="Upload your static site" loading="lazy" width="1536" height="1024">
       </div>
       <div class="step">
         <div class="step-num">03</div>
@@ -1125,6 +1066,7 @@
           <h3 data-i18n="how.step3.title">Upload and go live</h3>
           <p data-i18n="how.step3.desc">Upload a ZIP file with your static site. It's live instantly at your-slug.yourdomain.com.</p>
         </div>
+        <img class="step-media" src="/showcase-golive.png" alt="Your site goes live" loading="lazy" width="1536" height="1024">
       </div>
     </div>
   </section>
