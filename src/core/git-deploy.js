@@ -24,10 +24,49 @@ const GIT_CACHE_DIR = path.join(__dirname, '../../data/git-cache');
 const BRANCH_RE = /^(?!-)[A-Za-z0-9._\/-]{1,255}$/;
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
 
-// Accepted transports for a linked repo. `file://` and bare local paths are
-// rejected so a repo URL can't point git at the server's own filesystem.
+// Accepted transports for a linked repo. `file://`, `ext::`, and bare local
+// paths are rejected so a repo URL can't point git at the server's own
+// filesystem or a helper transport. The host must begin with an alphanumeric:
+// an SSH host like `-oProxyCommand=...` would be smuggled to ssh as an option
+// even through execFile + `--` (git stops parsing, ssh does not) — CVE-2017-1000117.
+// Transport/format guard used on EVERY clone (including Pipee's own trusted
+// Gitea URLs, which may legitimately be on an internal host). This is the
+// injection safety net — it must not block internal hosts or Gitea breaks.
 function isAllowedRepoUrl(url) {
-  return /^https?:\/\//.test(url) || /^git@[^\s]+:[^\s]+$/.test(url);
+  if (typeof url !== 'string') return false;
+  const HTTPS = /^https?:\/\/[A-Za-z0-9]/;
+  const SSH = /^git@[A-Za-z0-9][A-Za-z0-9.-]*:[^\s]+$/;
+  return HTTPS.test(url) || SSH.test(url);
+}
+
+// Stricter SSRF screen for USER-SUPPLIED repo URLs (link-repo / link-github):
+// on top of the transport check, refuse loopback / link-local (incl. the cloud
+// metadata IP 169.254.169.254) / RFC-1918 / *.internal hosts so a user can't
+// aim a linked repo at an internal service. Applied only at link time — Pipee's
+// own Gitea clone URLs never pass through here. Hostname-level only (can't stop
+// DNS rebinding), but it closes the obvious server-side-request vectors.
+function isPublicRepoUrl(url) {
+  return isAllowedRepoUrl(url) && !isBlockedHost(extractHost(url));
+}
+
+function extractHost(url) {
+  const scp = url.match(/^git@([A-Za-z0-9][A-Za-z0-9.-]*):/);
+  if (scp) return scp[1].toLowerCase();
+  try { return new URL(url).hostname.toLowerCase(); } catch { return ''; }
+}
+
+function isBlockedHost(host) {
+  if (!host) return true;
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal')) return true;
+  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const [a, b] = [Number(m[1]), Number(m[2])];
+    if (a === 127 || a === 10 || a === 0) return true;               // loopback / private / this-host
+    if (a === 169 && b === 254) return true;                          // link-local + cloud metadata
+    if (a === 192 && b === 168) return true;                          // private
+    if (a === 172 && b >= 16 && b <= 31) return true;                 // private
+  }
+  return false;
 }
 
 function assertBranch(branch) {
@@ -186,4 +225,4 @@ async function deployFromGitAtSha(slug, repoUrl, sha, opts = {}) {
   return { commit, size };
 }
 
-module.exports = { deployFromGit, deployFromGitAtSha, isAllowedRepoUrl, BRANCH_RE };
+module.exports = { deployFromGit, deployFromGitAtSha, isAllowedRepoUrl, isPublicRepoUrl, BRANCH_RE };

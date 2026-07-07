@@ -11,7 +11,7 @@ const crypto = require('crypto');
 const db = require('./db');
 const { hashPassword, verifyPassword, dummyVerify, generateToken, verifyUserRequest } = require('./user-auth');
 const { validateSlug, STATIC_DIR } = require('./static');
-const { deployFromGit, deployFromGitAtSha, isAllowedRepoUrl, BRANCH_RE } = require('./git-deploy');
+const { deployFromGit, deployFromGitAtSha, isPublicRepoUrl, BRANCH_RE } = require('./git-deploy');
 const { getClientIp, rateLimit } = require('./rate-limit');
 const gitea = require('./gitea');
 const aiEditor = require('./ai-editor');
@@ -1214,8 +1214,8 @@ async function handleLinkRepo(req, res, slug, config) {
     return jsonErr(res, 'repo_url is required', 'BAD_REQUEST', 400);
   }
 
-  if (!isAllowedRepoUrl(repoUrl)) {
-    return jsonErr(res, 'Invalid repo URL', 'BAD_REQUEST', 400);
+  if (!isPublicRepoUrl(repoUrl)) {
+    return jsonErr(res, 'Invalid or non-public repo URL', 'BAD_REQUEST', 400);
   }
 
   if (!BRANCH_RE.test(branch)) {
@@ -1663,6 +1663,10 @@ async function handleLinkGitHub(req, res, slug, config) {
 
   if (!repoUrl.startsWith('https://')) {
     return jsonErr(res, 'Please provide an HTTPS repo URL', 'BAD_REQUEST', 400);
+  }
+
+  if (!isPublicRepoUrl(repoUrl)) {
+    return jsonErr(res, 'Repo URL must be a public host', 'BAD_REQUEST', 400);
   }
 
   if (!BRANCH_RE.test(branch)) {

@@ -119,6 +119,14 @@ async function chat(slug, userMessage, sessionId) {
     '--append-system-prompt', systemPrompt,
     // `<tools...>` is variadic: each tool must be its own argv entry (a single
     // space-joined string would be read as one bogus tool name → deny-all).
+    // Bare tool names, NOT path-scoped: without --dangerously-skip-permissions
+    // Claude Code confines file tools to the working directory independently of
+    // the allowlist (the allowlist only skips the approval prompt, it does not
+    // widen the directory boundary). Verified against the installed CLI: an
+    // in-dir Edit succeeds while a `Read ../config.json` is denied and never
+    // leaks. Path-scoped rules like Read(./**) were tried and wrongly blocked
+    // in-dir edits too, so they're avoided. Bash/WebFetch/WebSearch/Task stay
+    // denied to remove shell execution and network egress.
     '--allowedTools', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'LS',
     '--disallowedTools', 'Bash', 'WebFetch', 'WebSearch', 'Task',
   ];
@@ -127,12 +135,21 @@ async function chat(slug, userMessage, sessionId) {
     args.push('--resume', sessionId);
   }
 
+  // Strip Pipee's own secrets from the child's environment. The CLI reads its
+  // credentials from disk (~/.claude), not env, so it doesn't need these — and
+  // dropping them removes any value from the subprocess dumping its env.
+  const childEnv = { ...process.env };
+  for (const k of ['JWT_SECRET', 'PAYGATE_WEBHOOK_SECRET', 'MAILER_TOKEN', 'TURNSTILE_SECRET']) {
+    delete childEnv[k];
+  }
+
   return new Promise((resolve, reject) => {
     const proc = spawn(claudeCli.cmd, [...claudeCli.prefix, ...args], {
       cwd: siteDir,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
+      env: childEnv,
     });
 
     let buffer = '';
