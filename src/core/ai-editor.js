@@ -101,6 +101,15 @@ async function chat(slug, userMessage, sessionId) {
     `- Only modify files inside this directory`,
   ].join('\n');
 
+  // SECURITY: do NOT use --dangerously-skip-permissions here. That flag would
+  // let the subprocess run arbitrary Bash and read files outside the site dir
+  // (e.g. ../../config.json holds jwtSecret / gitea token / paygate secret),
+  // then exfiltrate them — via network or by writing them into the public site.
+  // Instead we pin an allowlist of file-editing tools only: no Bash, no
+  // WebFetch/WebSearch (no shell exec, no network egress). With permissions on,
+  // Claude Code also confines Read/Write/Edit to the working directory, so the
+  // subprocess can't reach the parent config at all. The allowlisted tools are
+  // pre-approved so edits still apply without an interactive prompt in -p mode.
   const args = [
     '-p', userMessage,
     '--output-format', 'stream-json',
@@ -108,7 +117,10 @@ async function chat(slug, userMessage, sessionId) {
     '--model', 'sonnet',
     '--max-turns', '10',
     '--append-system-prompt', systemPrompt,
-    '--dangerously-skip-permissions',
+    // `<tools...>` is variadic: each tool must be its own argv entry (a single
+    // space-joined string would be read as one bogus tool name → deny-all).
+    '--allowedTools', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'LS',
+    '--disallowedTools', 'Bash', 'WebFetch', 'WebSearch', 'Task',
   ];
 
   if (sessionId) {

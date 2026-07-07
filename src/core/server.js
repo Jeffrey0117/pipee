@@ -31,6 +31,15 @@ function loadConfig() {
     config = {};
   }
 
+  // Fail closed on a missing/placeholder JWT secret. `index.js` mints a real
+  // one on startup; this guards the path where server.js is launched directly.
+  const jwtSecret = process.env.JWT_SECRET || config.jwtSecret || '';
+  if (!jwtSecret || jwtSecret === 'change-this-to-a-random-string') {
+    console.error('[pipee] Refusing to start: jwtSecret is unset or still the placeholder.');
+    console.error('[pipee] Set a strong jwtSecret in config.json (or the JWT_SECRET env var), or launch via `npm start`.');
+    process.exit(1);
+  }
+
   const port = config.port || parseInt(process.env.PORT, 10) || 3939;
   const domain = config.domain || 'localhost';
   const isLocal = domain === 'localhost' || domain === '127.0.0.1';
@@ -42,7 +51,7 @@ function loadConfig() {
     port,
     domain,
     externalUrl,
-    jwtSecret: config.jwtSecret || 'change-this-to-a-random-string',
+    jwtSecret,
     maxSites: config.maxSites || 10,
     maxSiteSize: config.maxSiteSize || 52428800,
     // Trust CF-Connecting-IP / X-Forwarded-For for rate limiting. Set false
@@ -84,7 +93,10 @@ function servePublicFile(res, filePath) {
   const contentType = MIME[ext] || 'application/octet-stream';
 
   if (fs.existsSync(filePath)) {
-    res.writeHead(200, { 'content-type': contentType });
+    res.writeHead(200, {
+      'content-type': contentType,
+      'x-content-type-options': 'nosniff',
+    });
     return fs.createReadStream(filePath).pipe(res);
   }
 

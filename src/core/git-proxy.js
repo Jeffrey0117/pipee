@@ -31,7 +31,7 @@ function parseGitPath(pathname) {
  * Authenticate via HTTP Basic Auth using Pipee credentials.
  * Returns user object or null.
  */
-function authenticateBasic(req) {
+async function authenticateBasic(req) {
   const authHeader = req.headers['authorization'] || '';
   if (!authHeader.startsWith('Basic ')) return null;
 
@@ -45,7 +45,7 @@ function authenticateBasic(req) {
   const user = db.getUserByUsername(username);
   if (!user) return null;
 
-  if (!verifyPassword(password, user.password_hash, user.salt)) return null;
+  if (!(await verifyPassword(password, user.password_hash, user.salt))) return null;
 
   return user;
 }
@@ -120,24 +120,30 @@ function filterHeaders(headers) {
 }
 
 /**
- * Read Gitea config helpers (avoid re-reading for every request).
+ * Read Gitea config once and memoize it. Config changes require a restart
+ * anyway, so there's no need to hit disk + JSON.parse on every git request.
  */
-function getGiteaUrl() {
-  const fs = require('fs');
-  const path = require('path');
+const fs = require('fs');
+const path = require('path');
+let _giteaCfg = null;
+
+function loadGiteaCfg() {
+  if (_giteaCfg) return _giteaCfg;
   try {
     const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../config.json'), 'utf8'));
-    return (cfg.gitea && cfg.gitea.url) || '';
-  } catch { return ''; }
+    _giteaCfg = cfg.gitea || {};
+  } catch {
+    _giteaCfg = {};
+  }
+  return _giteaCfg;
+}
+
+function getGiteaUrl() {
+  return loadGiteaCfg().url || '';
 }
 
 function getGiteaToken() {
-  const fs = require('fs');
-  const path = require('path');
-  try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../config.json'), 'utf8'));
-    return (cfg.gitea && cfg.gitea.token) || '';
-  } catch { return ''; }
+  return loadGiteaCfg().token || '';
 }
 
 /**
@@ -167,7 +173,7 @@ async function handle(req, res) {
 
   // Push requires authentication + ownership
   if (isPush) {
-    const user = authenticateBasic(req);
+    const user = await authenticateBasic(req);
     if (!user) return sendAuthRequired(res);
     if (site.user_id !== user.id) {
       res.writeHead(403, { 'Content-Type': 'text/plain' });

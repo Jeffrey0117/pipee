@@ -2,14 +2,56 @@
  * Pipee Git Deploy
  *
  * Clone/pull from a git repo and deploy as static site.
+ *
+ * SECURITY: every git invocation goes through execFileAsync with an argument
+ * ARRAY and shell:false — user-controlled values (repo URL, branch, SHA) are
+ * passed as argv, never interpolated into a command string, so they can't be
+ * turned into shell metacharacters. Branch/SHA/URL are also format-validated.
+ * All calls are async so a slow clone never blocks the HTTP event loop.
  */
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFile } = require('child_process');
 const { STATIC_DIR } = require('./static');
 
 const GIT_CACHE_DIR = path.join(__dirname, '../../data/git-cache');
+
+// Git refuses to interpret an argument as an option once it appears after `--`,
+// but branch/URL land in positions where `--` can't always guard them, so we
+// also validate their shape. A branch may be any valid ref name minus the
+// characters git itself forbids; we take a conservative subset.
+const BRANCH_RE = /^(?!-)[A-Za-z0-9._\/-]{1,255}$/;
+const SHA_RE = /^[0-9a-f]{7,40}$/i;
+
+// Accepted transports for a linked repo. `file://` and bare local paths are
+// rejected so a repo URL can't point git at the server's own filesystem.
+function isAllowedRepoUrl(url) {
+  return /^https?:\/\//.test(url) || /^git@[^\s]+:[^\s]+$/.test(url);
+}
+
+function assertBranch(branch) {
+  if (!BRANCH_RE.test(branch)) throw new Error('INVALID_BRANCH');
+  return branch;
+}
+
+// Promise wrapper around execFile with hard defaults: no shell, hidden window,
+// and a bounded buffer so a hostile repo can't blow up memory via git output.
+function git(args, { cwd, timeout = 30000 } = {}) {
+  return new Promise((resolve, reject) => {
+    execFile('git', args, {
+      cwd,
+      timeout,
+      windowsHide: true,
+      shell: false,
+      maxBuffer: 10 * 1024 * 1024,
+      encoding: 'utf-8',
+    }, (err, stdout) => {
+      if (err) return reject(err);
+      resolve(stdout);
+    });
+  });
+}
 
 function ensureGitCache() {
   if (!fs.existsSync(GIT_CACHE_DIR)) {
@@ -17,31 +59,24 @@ function ensureGitCache() {
   }
 }
 
-function deployFromGit(slug, repoUrl, branch = 'main', opts = {}) {
+async function deployFromGit(slug, repoUrl, branch = 'main', opts = {}) {
+  if (!isAllowedRepoUrl(repoUrl)) throw new Error('INVALID_REPO_URL');
+  assertBranch(branch);
   ensureGitCache();
 
   const cacheDir = path.join(GIT_CACHE_DIR, slug);
-  let commit;
 
   if (fs.existsSync(path.join(cacheDir, '.git'))) {
-    execSync(`git -C "${cacheDir}" fetch origin`, {
-      stdio: 'pipe', windowsHide: true, timeout: 30000,
-    });
-    execSync(`git -C "${cacheDir}" reset --hard origin/${branch}`, {
-      stdio: 'pipe', windowsHide: true, timeout: 10000,
-    });
+    await git(['-C', cacheDir, 'fetch', 'origin'], { cwd: cacheDir, timeout: 60000 });
+    await git(['-C', cacheDir, 'reset', '--hard', `origin/${branch}`], { cwd: cacheDir, timeout: 15000 });
   } else {
     if (fs.existsSync(cacheDir)) {
       fs.rmSync(cacheDir, { recursive: true, force: true });
     }
-    execSync(`git clone --depth 1 --branch ${branch} "${repoUrl}" "${cacheDir}"`, {
-      stdio: 'pipe', windowsHide: true, timeout: 60000,
-    });
+    await git(['clone', '--depth', '1', '--branch', branch, '--', repoUrl, cacheDir], { timeout: 120000 });
   }
 
-  commit = execSync(`git -C "${cacheDir}" rev-parse HEAD`, {
-    encoding: 'utf-8', windowsHide: true,
-  }).trim();
+  const commit = (await git(['-C', cacheDir, 'rev-parse', 'HEAD'], { cwd: cacheDir })).trim();
 
   if (!fs.existsSync(path.join(cacheDir, 'index.html'))) {
     throw new Error('NO_INDEX_HTML');
@@ -94,9 +129,12 @@ function copyDirExcludeGit(src, dest) {
     if (entry.name === '.git') continue;
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
+    // Skip symlinks: a repo could ship a link escaping the site dir, which the
+    // static server would then follow. Static sites are plain files only.
+    if (entry.isSymbolicLink && entry.isSymbolicLink()) continue;
     if (entry.isDirectory()) {
       copyDirExcludeGit(srcPath, destPath);
-    } else {
+    } else if (entry.isFile()) {
       fs.copyFileSync(srcPath, destPath);
     }
   }
@@ -116,38 +154,29 @@ function getDirSize(dir) {
   return size;
 }
 
-function deployFromGitAtSha(slug, repoUrl, sha, opts = {}) {
-  if (!/^[0-9a-f]{7,40}$/i.test(sha)) {
+async function deployFromGitAtSha(slug, repoUrl, sha, opts = {}) {
+  if (!SHA_RE.test(sha)) {
     throw new Error('INVALID_SHA');
   }
+  if (!isAllowedRepoUrl(repoUrl)) throw new Error('INVALID_REPO_URL');
 
   ensureGitCache();
   const cacheDir = path.join(GIT_CACHE_DIR, slug);
 
   if (!fs.existsSync(path.join(cacheDir, '.git'))) {
-    execSync(`git clone "${repoUrl}" "${cacheDir}"`, {
-      stdio: 'pipe', windowsHide: true, timeout: 60000,
-    });
+    await git(['clone', '--', repoUrl, cacheDir], { timeout: 120000 });
   }
 
   // Unshallow if needed (shallow clones can't checkout arbitrary SHAs)
   try {
-    execSync(`git -C "${cacheDir}" fetch --unshallow origin`, {
-      stdio: 'pipe', windowsHide: true, timeout: 60000,
-    });
+    await git(['-C', cacheDir, 'fetch', '--unshallow', 'origin'], { cwd: cacheDir, timeout: 120000 });
   } catch {
-    execSync(`git -C "${cacheDir}" fetch origin`, {
-      stdio: 'pipe', windowsHide: true, timeout: 30000,
-    });
+    await git(['-C', cacheDir, 'fetch', 'origin'], { cwd: cacheDir, timeout: 60000 });
   }
 
-  execSync(`git -C "${cacheDir}" checkout ${sha}`, {
-    stdio: 'pipe', windowsHide: true, timeout: 10000,
-  });
+  await git(['-C', cacheDir, 'checkout', sha], { cwd: cacheDir, timeout: 15000 });
 
-  const commit = execSync(`git -C "${cacheDir}" rev-parse HEAD`, {
-    encoding: 'utf-8', windowsHide: true,
-  }).trim();
+  const commit = (await git(['-C', cacheDir, 'rev-parse', 'HEAD'], { cwd: cacheDir })).trim();
 
   if (!fs.existsSync(path.join(cacheDir, 'index.html'))) {
     throw new Error('NO_INDEX_HTML');
@@ -157,4 +186,4 @@ function deployFromGitAtSha(slug, repoUrl, sha, opts = {}) {
   return { commit, size };
 }
 
-module.exports = { deployFromGit, deployFromGitAtSha };
+module.exports = { deployFromGit, deployFromGitAtSha, isAllowedRepoUrl, BRANCH_RE };

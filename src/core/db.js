@@ -56,6 +56,10 @@ function getDb() {
   _db = new Database(DB_PATH);
   _db.pragma('journal_mode = WAL');
   _db.pragma('busy_timeout = 5000');
+  // SQLite ignores declared FOREIGN KEYs unless this is on (per connection).
+  // Deletes already clear child rows first (see deleteRecordsBySite), so this
+  // is a safety net against orphaned site_data, not a behavior change.
+  _db.pragma('foreign_keys = ON');
 
   initSchema(_db);
   migrateGitFields(_db);

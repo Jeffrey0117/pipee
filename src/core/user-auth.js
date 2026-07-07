@@ -6,18 +6,23 @@
  */
 
 const crypto = require('crypto');
+const { promisify } = require('util');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
 
+const scrypt = promisify(crypto.scrypt);
+
 /**
  * Hash a password with a random salt using scrypt.
+ * Async so the KDF (deliberately CPU-heavy) runs off the event loop and can't
+ * be turned into a DoS by hammering register/login.
  * @param {string} password
- * @returns {{ hash: string, salt: string }}
+ * @returns {Promise<{ hash: string, salt: string }>}
  */
-function hashPassword(password) {
+async function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return { hash, salt };
+  const derived = await scrypt(password, salt, 64);
+  return { hash: derived.toString('hex'), salt };
 }
 
 /**
@@ -25,11 +30,22 @@ function hashPassword(password) {
  * @param {string} password
  * @param {string} hash
  * @param {string} salt
- * @returns {boolean}
+ * @returns {Promise<boolean>}
  */
-function verifyPassword(password, hash, salt) {
-  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
-  return crypto.timingSafeEqual(Buffer.from(derived, 'hex'), Buffer.from(hash, 'hex'));
+async function verifyPassword(password, hash, salt) {
+  const derived = await scrypt(password, salt, 64);
+  const hashBuf = Buffer.from(hash, 'hex');
+  if (derived.length !== hashBuf.length) return false;
+  return crypto.timingSafeEqual(derived, hashBuf);
+}
+
+// Constant-work verify for a non-existent user: runs a real scrypt against a
+// throwaway salt so login latency doesn't reveal whether a username exists
+// (timing oracle). Result is discarded; caller always returns "invalid".
+const DUMMY_SALT = crypto.randomBytes(16).toString('hex');
+async function dummyVerify(password) {
+  try { await scrypt(String(password || ''), DUMMY_SALT, 64); } catch { /* ignore */ }
+  return false;
 }
 
 /**
@@ -79,6 +95,7 @@ function verifyUserRequest(req, config) {
 module.exports = {
   hashPassword,
   verifyPassword,
+  dummyVerify,
   generateToken,
   verifyToken,
   verifyUserRequest,

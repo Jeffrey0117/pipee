@@ -9,9 +9,9 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const db = require('./db');
-const { hashPassword, verifyPassword, generateToken, verifyUserRequest } = require('./user-auth');
+const { hashPassword, verifyPassword, dummyVerify, generateToken, verifyUserRequest } = require('./user-auth');
 const { validateSlug, STATIC_DIR } = require('./static');
-const { deployFromGit, deployFromGitAtSha } = require('./git-deploy');
+const { deployFromGit, deployFromGitAtSha, isAllowedRepoUrl, BRANCH_RE } = require('./git-deploy');
 const { getClientIp, rateLimit } = require('./rate-limit');
 const gitea = require('./gitea');
 const aiEditor = require('./ai-editor');
@@ -506,8 +506,11 @@ async function handleRegister(req, res, config) {
   if (!data.username || typeof data.username !== 'string' || data.username.trim().length < 3) {
     return jsonErr(res, 'Username must be at least 3 characters', 'BAD_REQUEST', 400);
   }
-  if (!data.password || typeof data.password !== 'string' || data.password.length < 6) {
-    return jsonErr(res, 'Password must be at least 6 characters', 'BAD_REQUEST', 400);
+  if (!data.password || typeof data.password !== 'string' || data.password.length < 8) {
+    return jsonErr(res, 'Password must be at least 8 characters', 'BAD_REQUEST', 400);
+  }
+  if (data.password.length > 200) {
+    return jsonErr(res, 'Password is too long', 'BAD_REQUEST', 400);
   }
 
   const username = data.username.trim().toLowerCase();
@@ -535,7 +538,7 @@ async function handleRegister(req, res, config) {
     return jsonErr(res, 'Username already taken', 'CONFLICT', 409);
   }
 
-  const { hash, salt } = hashPassword(data.password);
+  const { hash, salt } = await hashPassword(data.password);
 
   let user;
   try {
@@ -595,7 +598,13 @@ async function handleLogin(req, res, config) {
   const username = data.username.trim().toLowerCase();
   const user = db.getUserByUsername(username);
 
-  if (!user || !verifyPassword(data.password, user.password_hash, user.salt)) {
+  // Always spend one scrypt so response time doesn't reveal whether the
+  // username exists (unknown user → dummy verify against a throwaway salt).
+  const ok = user
+    ? await verifyPassword(data.password, user.password_hash, user.salt)
+    : await dummyVerify(data.password);
+
+  if (!user || !ok) {
     return jsonErr(res, 'Invalid username or password', 'UNAUTHORIZED', 401);
   }
 
@@ -1205,8 +1214,12 @@ async function handleLinkRepo(req, res, slug, config) {
     return jsonErr(res, 'repo_url is required', 'BAD_REQUEST', 400);
   }
 
-  if (!repoUrl.startsWith('http://') && !repoUrl.startsWith('https://') && !repoUrl.startsWith('git@')) {
+  if (!isAllowedRepoUrl(repoUrl)) {
     return jsonErr(res, 'Invalid repo URL', 'BAD_REQUEST', 400);
+  }
+
+  if (!BRANCH_RE.test(branch)) {
+    return jsonErr(res, 'Invalid branch name', 'BAD_REQUEST', 400);
   }
 
   db.updateSite(slug, {
@@ -1247,7 +1260,7 @@ async function handleGitDeploy(req, res, slug, config) {
   }
 
   try {
-    const { commit, size } = deployFromGit(slug, site.repo_url, site.branch || 'main', { maxBytes });
+    const { commit, size } = await deployFromGit(slug, site.repo_url, site.branch || 'main', { maxBytes });
     db.updateSite(slug, { last_commit: commit, size });
 
     const siteUrl = getSiteUrl(req, slug, config);
@@ -1264,6 +1277,9 @@ async function handleGitDeploy(req, res, slug, config) {
     }
     if (err.message === 'SITE_TOO_LARGE') {
       return jsonErr(res, 'Repository exceeds your size or storage limit', 'SITE_TOO_LARGE', 413);
+    }
+    if (err.message === 'INVALID_BRANCH' || err.message === 'INVALID_REPO_URL') {
+      return jsonErr(res, 'Linked repo has an invalid URL or branch', 'BAD_REPO', 400);
     }
     return jsonErr(res, 'Git deploy failed', 'DEPLOY_FAILED', 500);
   }
@@ -1313,7 +1329,7 @@ async function handleWebhookDeploy(req, res, slug, config) {
   try {
     const owner = db.getUserById(site.user_id);
     const maxBytes = Math.min(MAX_EXTRACTED_SIZE, Math.max(0, storageHeadroom(owner, site)));
-    const { commit, size } = deployFromGit(slug, site.repo_url, site.branch || 'main', { maxBytes });
+    const { commit, size } = await deployFromGit(slug, site.repo_url, site.branch || 'main', { maxBytes });
     db.updateSite(slug, { last_commit: commit, size });
     console.log(`[webhook] Deployed ${slug} from git (${commit.slice(0, 7)})`);
   } catch (err) {
@@ -1587,7 +1603,7 @@ async function handleRollback(req, res, slug, config) {
   }
 
   try {
-    const { commit, size } = deployFromGitAtSha(slug, site.repo_url, sha, { maxBytes });
+    const { commit, size } = await deployFromGitAtSha(slug, site.repo_url, sha, { maxBytes });
     db.updateSite(slug, { last_commit: commit, size });
 
     const siteUrl = getSiteUrl(req, slug, config);
@@ -1647,6 +1663,10 @@ async function handleLinkGitHub(req, res, slug, config) {
 
   if (!repoUrl.startsWith('https://')) {
     return jsonErr(res, 'Please provide an HTTPS repo URL', 'BAD_REQUEST', 400);
+  }
+
+  if (!BRANCH_RE.test(branch)) {
+    return jsonErr(res, 'Invalid branch name', 'BAD_REQUEST', 400);
   }
 
   const crypto = require('crypto');
@@ -1908,7 +1928,7 @@ async function handleGitHubWebhook(req, res, slug, config) {
   try {
     const owner = db.getUserById(site.user_id);
     const maxBytes = Math.min(MAX_EXTRACTED_SIZE, Math.max(0, storageHeadroom(owner, site)));
-    const { commit, size } = deployFromGit(slug, site.repo_url, site.branch || 'main', { maxBytes });
+    const { commit, size } = await deployFromGit(slug, site.repo_url, site.branch || 'main', { maxBytes });
     db.updateSite(slug, { last_commit: commit, size });
     console.log(`[github-webhook] Deployed ${slug} from GitHub (${commit.slice(0, 7)})`);
   } catch (err) {

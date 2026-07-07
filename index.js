@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 // Ensure data directories exist
 const dataDir = path.join(__dirname, 'data');
@@ -35,7 +36,27 @@ const examplePath = path.join(__dirname, 'config.example.json');
 if (!fs.existsSync(configPath) && fs.existsSync(examplePath)) {
   fs.copyFileSync(examplePath, configPath);
   console.log('[pipee] Created config.json from config.example.json');
-  console.log('[pipee] Please update jwtSecret in config.json before production use!');
+}
+
+// Harden the JWT secret: the shipped placeholder is public (it's in the repo),
+// so anyone could forge tokens — including one for the id=1 admin. If the
+// config still carries the placeholder (or no secret at all), mint a strong
+// random secret and persist it. This runs before the server loads its config,
+// so a fresh install is safe by default with no manual step. Rotating the
+// secret logs out any existing sessions once, which is the intended trade-off.
+const PLACEHOLDER_SECRET = 'change-this-to-a-random-string';
+try {
+  if (fs.existsSync(configPath)) {
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (!cfg.jwtSecret || cfg.jwtSecret === PLACEHOLDER_SECRET) {
+      cfg.jwtSecret = crypto.randomBytes(48).toString('hex');
+      fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
+      console.log('[pipee] Generated a random jwtSecret in config.json');
+    }
+  }
+} catch (err) {
+  console.error('[pipee] Failed to normalize jwtSecret:', err.message);
+  process.exit(1);
 }
 
 // Start server
