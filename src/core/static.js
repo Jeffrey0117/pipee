@@ -53,6 +53,14 @@ const RESERVED_SLUGS = new Set([
   'login', 'signup', 'blog', 'docs',
   'console', 'billing', 'support', 'help', 'about',
   'ns1', 'ns2', 'dev', 'staging', 'test', 'demo', 'assets',
+  // Security / identity / payment words — reserved so nobody can squat a
+  // trust-bearing subdomain (e.g. auth.<your-domain>) and host a login/console
+  // lookalike as phishing bait on your own apex.
+  'auth', 'oauth', 'sso', 'signin', 'signout', 'logout', 'register',
+  'account', 'accounts', 'user', 'users', 'me', 'profile', 'settings',
+  'secure', 'security', 'verify', 'verification', 'password', 'reset',
+  'token', 'session', 'sessions',
+  'pay', 'payment', 'payments', 'checkout', 'wallet', 'subscribe', 'subscription',
 ]);
 
 function isValidSlug(slug) {
